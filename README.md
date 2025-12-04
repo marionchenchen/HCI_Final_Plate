@@ -126,3 +126,6 @@ frontend-app/screens/      # App主要頁面
 ```
 backend/app/
 ```
+## Update
+現在預約功能是正常的 可以在app裡面預約一份並且更新到database
+provider發佈功能不正常，如果要測試可以先在後端加剩食資訊:瀏覽器打http://localhost:8000/docs#/ 然後在“POST /food/” 按try it out 可以發布訂單
