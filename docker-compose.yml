@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:15
+    container_name: hci_db
+    restart: always
+    environment:
+      POSTGRES_DB: hci_demo
+      POSTGRES_USER: hci_user
+      POSTGRES_PASSWORD: hci_password
+    ports:
+      - "5433:5432"   # 注意：host 的 5433 對 container 的 5432
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: hci_backend
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+
+volumes:
+  db_data:
