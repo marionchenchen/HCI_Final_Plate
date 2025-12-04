@@ -8,20 +8,31 @@ services:
       POSTGRES_USER: hci_user
       POSTGRES_PASSWORD: hci_password
     ports:
-      - "5433:5432"   # 注意：host 的 5433 對 container 的 5432
+      - "5433:5432"   # host 5433 -> container 5432
     volumes:
       - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hci_user -d hci_demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
     container_name: hci_backend
     restart: always
     env_file:
       - .env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      # 讓 backend 程式碼修改後可即時生效（hot reload）
+      - ./backend/app:/app/app
+      - ./backend/requirements.txt:/app/requirements.txt
 
 volumes:
   db_data:
