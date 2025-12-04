@@ -107,7 +107,7 @@ SELECT id, title, total_quantity, reserved_quantity FROM foods;
 
 - server :在瀏覽器打
 ```
-http://localhost:8000
+http://localhost:8000/docs
 ```
 http://localhost:8000/ 或是 docker 應該可以看到後端的更新狀態
 <img width="1473" height="1035" alt="image" src="https://github.com/user-attachments/assets/f0b1c40e-fce4-4cd6-905d-db73f0a354f9" />
