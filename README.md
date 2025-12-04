@@ -10,7 +10,7 @@
 ## 📁 專案結構
 
 ```text
-FOOD/
+/
 ├─ backend/               #後端
 │  ├─ app/                # 後端 API 程式碼
 │  ├─ Dockerfile          # 後端 Docker 設定
@@ -44,7 +44,7 @@ FOOD/
 1️⃣ 下載專案
 ```
 git clone https://github.com/marionchenchen/HCI_Final_Plate.git
-cd FOOD
+cd HCI_Final_Plate
 ```
 
 2️⃣ 在專案根目錄建立 .env 檔，加入：
@@ -54,7 +54,7 @@ DATABASE_URL=postgresql+psycopg2://hci_user:hci_password@db:5432/hci_demo
 
 3️⃣ 使用 Docker 啟動後端（與資料庫）
 ```
-cd Food
+cd HCI_Final_Plate
 docker compose up --build
 # Docker 會自動：建立後端 Python 環境、安裝 requirements.txt、啟動後端 API、啟動資料庫
 ```
