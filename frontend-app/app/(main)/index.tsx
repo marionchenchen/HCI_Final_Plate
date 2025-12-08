@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
+import Home from '../(main)/Home';  
 
 export default function MainScreenSimulation() {
     const router = useRouter();
@@ -10,20 +11,22 @@ export default function MainScreenSimulation() {
         
         {/* 地圖 */}
         <View style={styles.mapPlaceholder}>
-            <Text style={styles.placeholderText}>[主頁面 MAIN PAGE]</Text>
+            {/* <Text style={styles.placeholderText}>[主頁面 MAIN PAGE]</Text> */}
+            {/* <Home /> */}
+            
         </View>
         
         {/* 模擬剩食資訊(Provider) */}
         <TouchableOpacity
             style={styles.triggerButton}
-            onPress={() => router.push('/(main)/foodinfo_pro')}>
+            onPress={() => router.push('/(main)/foodinfo_rcv')}>
             <Text style={styles.triggerButtonText}>查看剩食資訊 (Provider)</Text>
         </TouchableOpacity>
         
         {/* 模擬剩食資訊(Receiver) */}
         <TouchableOpacity
             style={styles.triggerButton}
-            onPress={() => router.push('/(main)/foodinfo_rcv')}>
+            onPress={() => router.push('/(main)/Home')}>
             <Text style={styles.triggerButtonText}>查看剩食資訊 (Receiver)</Text>
         </TouchableOpacity>
 

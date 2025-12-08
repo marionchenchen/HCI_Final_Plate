@@ -2,7 +2,7 @@
 import axios from "axios";
 
 // 用 ifconfig 找到你自己的 IP：ex, ip addr show
-export const API_BASE = "http://172.20.10.2:8000";
+export const API_BASE = "http://192.168.0.53:8000";
 
 const client = axios.create({
     baseURL: API_BASE,
