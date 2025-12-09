@@ -132,12 +132,12 @@ class Reservation(Base):
     __tablename__ = "reservations"
 
 
-    id = Column(Integer, primary_key=True, index=True)
+    reservation_id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.user_id"))
     food_id = Column(Integer, ForeignKey("posts.food_id"))
 
 
-    item = Column(String)
+    item_id = Column(Integer, ForeignKey("items.id"))
     number_book = Column(Integer)
     reserve_at = Column(DateTime, default=datetime.utcnow)
 

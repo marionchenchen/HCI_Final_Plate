@@ -12,7 +12,7 @@ router = APIRouter(
 # -------------------------
 # Pickup Success (領取成功)
 # -------------------------
-@router.post("/pickup/success", response_model=schemas.PickupSuccess)
+@router.post("/pickup/success", response_model=dict)
 def pickup_success(data: schemas.PickupSuccess, db: Session = Depends(get_db)):
 
     # find reservations
@@ -28,7 +28,7 @@ def pickup_success(data: schemas.PickupSuccess, db: Session = Depends(get_db)):
     for r in reservations:
         item_row = db.query(models.Item).filter_by(
             food_id=data.food_id,
-            item=r.item
+            id=r.item_id
         ).first()
 
         if item_row:
@@ -72,7 +72,7 @@ def pickup_success(data: schemas.PickupSuccess, db: Session = Depends(get_db)):
 # -------------------------
 # Pickup Failed (領取失敗)
 # -------------------------
-@router.post("/pickup/fail", response_model=schemas.PickupFail)
+@router.post("/pickup/fail", response_model=dict)
 def pickup_fail(data: schemas.PickupFail, db: Session = Depends(get_db)):
 
     # find reservations
@@ -88,7 +88,7 @@ def pickup_fail(data: schemas.PickupFail, db: Session = Depends(get_db)):
     for r in reservations:
         item_row = db.query(models.Item).filter_by(
             food_id=data.food_id,
-            item=r.item
+            id=r.item_id
         ).first()
 
         if item_row:
@@ -112,3 +112,25 @@ def pickup_fail(data: schemas.PickupFail, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Pickup failed, items restored to online display"}
+
+# -------------------------
+# Comments (查看留言)
+# -------------------------
+@router.get("/comments/{food_id}", response_model=list)
+def get_comments(food_id: int, db: Session = Depends(get_db)):
+    """
+    Retrieve comments for a given food_id.
+    Returns a list of dicts: {id, user_id, food_id, comment}.
+    """
+    comments = db.query(models.Comment).filter_by(food_id=food_id).order_by(models.Comment.id.asc()).all()
+
+    return [
+        {
+            "id": getattr(c, "id", None),
+            "user_id": getattr(c, "user_id", None),
+            "food_id": getattr(c, "food_id", None),
+            "comment": getattr(c, "comment", None),
+            
+        }
+        for c in comments
+    ]

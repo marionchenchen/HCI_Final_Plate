@@ -22,6 +22,8 @@ def create_post(post_in: schemas.PostCreate, db: Session = Depends(get_db)):
         note=post_in.note,
         gps_latitude=post_in.gps_latitude,
         gps_longitude=post_in.gps_longitude,
+        time_restriction=post_in.time_restriction,
+        distance_restriction=post_in.distance_restriction,
     )
     db.add(post)
 
@@ -90,8 +92,9 @@ def update_post(food_id: int, post_in: schemas.PostUpdate, db: Session = Depends
             item = db.query(models.Item).filter(models.Item.id == item_update.id).first()
             if not item:
                 raise HTTPException(status_code=404, detail=f"Item {item_update.id} not found")
-
+            delta = item_update.number_online - item.number_online
             item.number_online = item_update.number_online
+            item.number_onsite += delta
 
     # 更新圖
     if post_in.pictures is not None:

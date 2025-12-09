@@ -37,6 +37,51 @@ class Comment(BaseModel):
     comment: str
     model_config = {"from_attributes": True}
 
+# ---------- Reservation Schemas ----------
+class ReservationCreate(BaseModel):
+    user_id: int
+    food_id: int
+    item_id: int
+    number_book: int
+
+
+class Reservation(BaseModel):
+    reservation_id: int
+    user_id: int
+    food_id: int
+    item_id: int
+    number_book: int
+    reserve_at: datetime
+
+    model_config = {"from_attributes": True}
+
+class ReservationModify(BaseModel):
+    modify: int  # 正數表示增加預約數量（會扣除 item.number_online），負數表示減少預約數量（會回補 item.number_online）
+
+
+    # 新增 User schemas
+class UserCreate(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+    nickname: Optional[str] = None
+    profile_pic: Optional[str] = None
+    gps_latitude: Optional[float] = None
+    gps_longitude: Optional[float] = None
+
+class User(BaseModel):
+    user_id: int
+    email: str
+    name: Optional[str] = None
+    nickname: Optional[str] = None
+    profile_pic: Optional[str] = None
+    gps_latitude: Optional[float] = None
+    gps_longitude: Optional[float] = None
+
+    model_config = {"from_attributes": True}
+
+
+
 # ---------- Post Schemas ----------
 class PostCreate(BaseModel):
     user_id: Optional [int] = None
@@ -46,6 +91,8 @@ class PostCreate(BaseModel):
 
     gps_latitude: Optional[float] = None
     gps_longitude: Optional[float] = None
+    time_restriction: Optional[int] = None
+    distance_restriction: Optional[float] = None
 
     items: List[ItemCreate]
     pictures: Optional[List[PictureCreate]] = None 
@@ -60,6 +107,8 @@ class Post(BaseModel):
 
     gps_latitude: Optional[float]
     gps_longitude: Optional[float]
+    time_restriction: Optional[int]
+    distance_restriction: Optional[float]
 
     created_at: datetime 
     updated_at: datetime 
@@ -73,7 +122,7 @@ class Post(BaseModel):
 class PostUpdate(BaseModel):
     tag: Optional[str] = None
     note: Optional[str] = None
-    time_restriction: Optional[str] = None
+    time_restriction: Optional[int] = None
     distance_restriction: Optional[float] = None
     items: Optional[List[ItemUpdate]] = None
     pictures: Optional[List[PictureCreate]] = None 
@@ -88,3 +137,4 @@ class PickupSuccess(BaseModel):
 class PickupFail(BaseModel):
     user_id: Optional [int] = None
     food_id: int
+
