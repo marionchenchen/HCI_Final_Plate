@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
   Image, Dimensions, TextInput, Alert 
-} from 'react-native'; 
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
