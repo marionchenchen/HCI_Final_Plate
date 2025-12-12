@@ -16,13 +16,22 @@ import MapView, { Marker, Circle, Region, MapPressEvent } from "react-native-map
 import * as Location from "expo-location";
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useUser } from "../../context/UserContext";
 
-const LocalFoodImage = require('../../assets/pizza.jpg'); 
+
+const LocalFoodImage = require('../../assets/pizza.jpg');
 const { width, height } = Dimensions.get("window");
 const LATITUDE_DELTA = 0.01;
 const LONGITUDE_DELTA = LATITUDE_DELTA * (width / height);
 const MAX_SHEET_HEIGHT = 400;
 const my_user_id = 1;
+
+const locationOptions = {
+  accuracy: Location.Accuracy.Balanced,
+  // 您也可以加入 timeout 屬性來設定超時時間
+  // timeout: 10000, 
+};
+
 
 interface FoodItem {
   item: string;
@@ -47,6 +56,10 @@ interface LocationData {
 }
 
 export default function Home() {
+  const { userId } = useUser();
+  console.log("目前這台裝置的 user_id =", userId);
+
+
   const router = useRouter();
   const locations: LocationData[] = [
     {
@@ -102,6 +115,7 @@ export default function Home() {
         return;
       }
       let location = await Location.getCurrentPositionAsync({});
+      console.log('當前位置精確度誤差：', location.coords.accuracy, '公尺');
       setUserRegion({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
@@ -218,8 +232,8 @@ export default function Home() {
                   {/* 右上角按鈕 */}
                   <View style={styles.topRightButtonContainer}>
                     {my_user_id === selectedLocation.user_id ? (
-                      <TouchableOpacity 
-                        onPress={() => router.push('/(main)/newpost')} 
+                      <TouchableOpacity
+                        onPress={() => router.push('/(main)/newpost')}
                         style={styles.iconButton}
                       >
                         <Ionicons name="create-outline" size={24} color="#333" />
@@ -268,8 +282,8 @@ export default function Home() {
                   <View style={styles.noAccessRightContent}>
                     <Text style={styles.noAccessTitle}>您的驗證碼為</Text>
 
-                    <Image 
-                      source={require('../../assets/tree.png')} 
+                    <Image
+                      source={require('../../assets/tree.png')}
                       style={styles.noAccessImage}
                     />
 
@@ -283,7 +297,7 @@ export default function Home() {
       )}
 
       <View style={styles.bottomBar}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.addButton}
           onPress={() => router.push('/(main)/newpost')}>
           <Text style={styles.addButtonText}>+</Text>
@@ -296,6 +310,11 @@ export default function Home() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 16,
+  },
   map: { width: '100%', height: '100%' },
 
   bottomSheet: {
@@ -358,25 +377,25 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
   },
 
-  addButton: { 
-        position: 'absolute', 
-        bottom: 40, 
-        alignSelf: 'center', 
-        backgroundColor: '#576238', 
-        width: 60, 
-        height: 60, 
-        borderRadius: 30, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        elevation: 5, 
-        shadowColor: '#000', 
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 3,
-    },
-    addButtonText: { color: 'white', fontSize: 30, lineHeight: 30 },
+  addButton: {
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+    backgroundColor: '#576238',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  addButtonText: { color: 'white', fontSize: 30, lineHeight: 30 },
 
-    noAccessContainer: {
+  noAccessContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 15,
@@ -423,22 +442,22 @@ const styles = StyleSheet.create({
   },
 
   topRightButtonContainer: {
-  position: 'absolute',
-  top: 0,
-  right: 0,
-  zIndex: 10,
-},
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    zIndex: 10,
+  },
 
-iconButton: {
-  padding: 6,
-  backgroundColor: '#fff',
-  borderRadius: 8,
-  elevation: 2,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 1 },
-  shadowOpacity: 0.2,
-  shadowRadius: 1.5,
-},
+  iconButton: {
+    padding: 6,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.5,
+  },
 
 
 });
