@@ -375,10 +375,10 @@ const ReservedFoodView = ({ location }) => {
 
 export default function FoodDetailSheet({ location, handleClose, myUserId, onToggleShowMarkers }: FoodDetailSheetProps) {
     const router = useRouter();
-    
+
     // 檢查是否為自己發布的食物
-    // const isMyFood = myUserId === location.user_id;
-    const isMyFood = 1;
+    const isMyFood = myUserId === location.user_id;
+    // const isMyFood = 1;
 
     // 檢查是否已預約 (模擬：如果 ID 是 2 則視為已預約)
     // const isReserved = !isMyFood && location.user_id === RESERVED_FOOD_ID;

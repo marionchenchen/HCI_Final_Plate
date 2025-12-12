@@ -17,16 +17,24 @@ import { useRouter } from 'expo-router';
 
 import FoodDetailSheet from './FoodDetailSheet'; 
 import { fetchPosts } from "../../api";
+import { useUser } from "../../context/UserContext"
 
 const LocalFoodImage = require('../../assets/pizza.jpg'); 
 const LocalTreeImage = require('../../assets/tree.png'); 
+
 const { width, height } = Dimensions.get("window");
 const LATITUDE_DELTA = 0.01;
 const LONGITUDE_DELTA = LATITUDE_DELTA * (width / height);
 const MAX_SHEET_HEIGHT = 400;
-const my_user_id = 1; // 假設我是user_1!
 
 const FILTER_TAGS = ['中式', '日式', '西式', '甜點', '素食', '飲料', '熱食', '冷藏'];
+
+const locationOptions = {
+  accuracy: Location.Accuracy.Balanced,
+  // 您也可以加入 timeout 屬性來設定超時時間
+  // timeout: 10000, 
+};
+
 
 interface FoodItem {
     item_name: string;
@@ -67,7 +75,10 @@ interface FrontendReservationItem {
 }
 
 export default function Home() {
+
     const router = useRouter();
+    const { userId, loading } = useUser();
+    console.log("目前這台裝置的 user_id =", userId);
 
     const [posts, setPosts] = useState<PostData[]>([]); 
     const [isLoading, setIsLoading] = useState(true); // 新增載入狀態
@@ -275,7 +286,7 @@ export default function Home() {
                     <FoodDetailSheet
                         location={selectedPost}
                         handleClose={handleClose}
-                        myUserId={my_user_id}
+                        myUserId={userId}
                         onToggleShowMarkers={handleToggleReservationMarkers}
                     />
                 </Animated.View>

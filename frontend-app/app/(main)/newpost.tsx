@@ -8,9 +8,9 @@ import { useRouter } from 'expo-router';
 import * as Location from 'expo-location'; 
 import * as ImagePicker from 'expo-image-picker';
 import { publishFoodPost } from '../../api';
+import { useUser } from "../../context/UserContext"
 
 const { width } = Dimensions.get('window');
-const my_user_id = 1;
 const selectedTag = "中式";
 
 interface FoodItemState {
@@ -231,6 +231,7 @@ export default function NewPostScreen() {
     const [distanceRestriction, setDistanceRestriction] = useState('2'); // distance_restriction (公里)
     
     const [isLoading, setIsLoading] = useState(false);
+    const { userId, loading } = useUser();
     
     // GPS 狀態
     const [gpsLocation, setGpsLocation] = useState<{ latitude: number | null, longitude: number | null }>({ latitude: null, longitude: null });
@@ -337,7 +338,7 @@ export default function NewPostScreen() {
 
         // 🌟 3. 最終的 PostCreate Payload 
         const postPayload = {
-            // user_id: my_user_id,
+            user_id: userId,
             address: address,
             tag: selectedTag, // 假設是單一字串
             note: note,
