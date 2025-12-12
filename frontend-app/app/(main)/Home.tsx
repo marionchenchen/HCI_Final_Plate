@@ -8,7 +8,7 @@ import {
     Animated,
     Alert,
     Image,
-    ImageSourcePropType
+    ImageSourcePropType,
 } from "react-native";
 import MapView, { Marker, Circle, Region, MapPressEvent } from "react-native-maps";
 import * as Location from "expo-location";
@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import FoodDetailSheet from './FoodDetailSheet'; 
+import { fetchPosts } from "../../api";
 
 const LocalFoodImage = require('../../assets/pizza.jpg'); 
 const LocalTreeImage = require('../../assets/tree.png'); 
@@ -24,6 +25,8 @@ const LATITUDE_DELTA = 0.01;
 const LONGITUDE_DELTA = LATITUDE_DELTA * (width / height);
 const MAX_SHEET_HEIGHT = 400;
 const my_user_id = 1; // 假設我是user_1!
+
+const FILTER_TAGS = ['中式', '日式', '西式', '甜點', '素食', '飲料', '熱食', '冷藏'];
 
 interface FoodItem {
     item_name: string;
@@ -51,57 +54,31 @@ interface PostData {
     color: `#${string}`; 
 }
 
+interface FrontendReservationItem {
+    res_id: number;
+    order_number: number;
+    username: string;
+    reserved_item_name: string;
+    reserved_quantity: number;
+    time_left_seconds: number;
+    gps_latitude: number;
+    gps_longitude: number;
+    is_collected: boolean;
+}
+
 export default function Home() {
     const router = useRouter();
 
-    // 假資料，TODO: 連到table "POST"
-    const posts: PostData[] = [
-        {
-            food_id: 101,
-            user_id: 1,
-            address: "女二路易莎前桌子",
-            tags: ["披薩"],
-            note: "建議自備容器/衛生紙",
-            time_restriction: 10,
-            distance_restriction: 200,
-            created_at: "2025/12/9 11:00",
-            updated_at: 10,
-            verification_icon: LocalTreeImage,
-            gps_latitude: 24.785,
-            gps_longitude: 121.0,
-            color: "#D8B850",
-            image: LocalFoodImage,
-            food_items: [
-                { item_name: "蒜香起司燻雞培根披薩", quantity: 3 },
-                { item_name: "香濃時蔬海鮮披薩", quantity: 5 },
-            ],
-        },
-        {
-            food_id: 102,
-            user_id: 2,
-            address: "工三一樓大廳旁",
-            tags: ["鬆餅", "飲料"],
-            note: "很好吃",
-            time_restriction: 5,
-            distance_restriction: 100,
-            created_at: "2025/12/9 11:30",
-            updated_at: 5,
-            verification_icon: LocalTreeImage, 
-            gps_latitude: 24.785631765168848,
-            gps_longitude: 120.99699873031997,
-            color: "#8E8FBE",
-            image: LocalFoodImage,
-            food_items: [
-                { item_name: "抹茶鬆餅", quantity: 1 },
-                { item_name: "黑糖奶茶", quantity: 2 },
-            ],
-        },
-    ];
+    const [posts, setPosts] = useState<PostData[]>([]); 
+    const [isLoading, setIsLoading] = useState(true); // 新增載入狀態
+    const [error, setError] = useState<string | null>(null); // 新增錯誤狀態
 
     const [selectedPost, setSelectedPost] = useState<PostData | null>(null);
     const [userRegion, setUserRegion] = useState<Region | null>(null);
     const [tracksViewMap, setTracksViewMap] = useState<{ [key: number]: boolean }>({});
     const slideAnim = useState(new Animated.Value(0))[0];
+
+    const [reservationMarkers, setReservationMarkers] = useState<FrontendReservationItem[]>([]);
 
 	// 獲取定位資訊
     useEffect(() => {
@@ -120,6 +97,46 @@ export default function Home() {
         });
         })();
     }, []);
+
+    // 獲取所有剩食資訊(呼叫 API)
+    useEffect(() => {
+        async function loadPosts() {
+            try {
+                setIsLoading(true);
+                setError(null);
+                
+                const apiPosts = await fetchPosts(); 
+                
+                // 資料格式轉換
+                // 後端返回的 Post 結構可能缺少 color 和 image 欄位 <- 這啥意思 (但感覺暫時沒問題，先不要管)
+                const transformedPosts: PostData[] = apiPosts.map(post => {
+                    const apiPost = post as any;
+                    
+                    const transformedFoodItems = (apiPost.items || []).map(item => ({
+                        item_name: item.item, 
+                        quantity: item.number_online, 
+                    }));
+                    
+                    return {
+                        ...apiPost,
+                        food_items: transformedFoodItems, 
+                        image: apiPost.pictures && apiPost.pictures.length > 0 
+                            ? { uri: `data:image/jpeg;base64,${apiPost.pictures[0].picture}` } 
+                            : LocalFoodImage, 
+                    };
+                });
+                setPosts(transformedPosts);
+            } catch (err) {
+                console.error("Failed to load posts:", err);
+                setError("無法加載貼文，請檢查網絡或伺服器狀態。");
+                Alert.alert("加載失敗", "無法從伺服器取得貼文。");
+            } finally {
+                setIsLoading(false);
+            }
+        }
+
+        loadPosts();
+    }, []); 
 
     const handleMarkerPress = (post: PostData) => {
         setSelectedPost(post);
@@ -147,7 +164,40 @@ export default function Home() {
         outputRange: [-MAX_SHEET_HEIGHT, 0],
     });
 
+    // 定義控制 Marker 顯示/隱藏的函式
+    const handleToggleReservationMarkers = (
+        show: boolean, 
+        reservationData: FrontendReservationItem[]
+    ) => {
+        if (show) {
+            // 顯示 Marker：將預約數據儲存到狀態中
+            setReservationMarkers(reservationData);
+        } else {
+            // 隱藏 Marker：將狀態清空
+            setReservationMarkers([]);
+        }
+    };
+
     // --- Render ---
+
+    // 處理載入和錯誤狀態 (TODO: 樣式還沒寫)
+    if (isLoading) {
+        return (
+            <View style={styles.loadingContainer}>
+                <Text>正在加載貼文...</Text>
+            </View>
+        );
+    }
+
+    if (error) {
+        return (
+            <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>錯誤: {error}</Text>
+                {/* 可以添加一個重試按鈕 */}
+            </View>
+        );
+    }
+
     return (
         <View style={styles.container}>
             <MapView
@@ -163,7 +213,7 @@ export default function Home() {
                 }
                 }
             >
-                {/* 遍歷 POST */}
+                {/* 渲染所有 posts 的圈圈 */}
                 {posts.map((post) => {
                     const isTracksView = tracksViewMap[post.food_id] ?? true; 
 
@@ -208,7 +258,15 @@ export default function Home() {
                 )}
             </MapView>
 
-            {/* 使用 selectedPost 傳到 FoodDetailSheet */}
+			{/* 偏好設定按鈕 */}
+            <TouchableOpacity 
+                style={styles.settingsButton}
+                onPress={() => router.push('/(main)/NotificationPreference')} 
+            >
+                <Ionicons name="settings" size={26} color="#333" />
+            </TouchableOpacity>
+
+            {/* 把 selectedPost 傳到 FoodDetailSheet */}
             {selectedPost && (
                 <Animated.View 
                     style={[styles.bottomSheet, { bottom: bottomPosition }]}
@@ -218,6 +276,7 @@ export default function Home() {
                         location={selectedPost}
                         handleClose={handleClose}
                         myUserId={my_user_id}
+                        onToggleShowMarkers={handleToggleReservationMarkers}
                     />
                 </Animated.View>
             )}
@@ -240,6 +299,20 @@ const styles = StyleSheet.create({
     map: {
         width: width,
         height: height,
+    },
+    settingsButton: { 
+        position: 'absolute',
+        top: 30,
+        right: 20,
+        zIndex: 10,
+        backgroundColor: 'white',
+        borderRadius: 20,
+        padding: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 1.41,
+        elevation: 2,
     },
     bottomSheet: {
         position: 'absolute',

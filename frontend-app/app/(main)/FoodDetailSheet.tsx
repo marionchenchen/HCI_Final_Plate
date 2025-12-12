@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { 
     View, Text, StyleSheet, ScrollView, 
-    TouchableOpacity, Image, Alert, Dimensions, TextInput 
+    TouchableOpacity, Image, Alert, Dimensions, TextInput, FlatList 
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Share, ImageSourcePropType } from 'react-native';
+import { fetchReservationsByFood } from "../../api";
 
-const LocalFoodImage = require('../../assets/pizza.jpg'); 
-const { height } = Dimensions.get("window");
-const MAX_SHEET_HEIGHT = 400;
+const PADDING_HORIZONTAL = 18;
 
 interface FoodItem {
     item_name: string;
@@ -40,6 +39,33 @@ interface FoodDetailSheetProps {
     location: PostData; 
     handleClose: () => void;
     myUserId: number;
+    onToggleShowMarkers: (show: boolean, reservationData: FrontendReservationItem[]) => void;
+}
+
+interface ProviderFoodStatusProps {
+    location: PostData;
+    reservations: FrontendReservationItem[];
+    isLoadingReservations: boolean;
+    loadError: string | null;
+    onToggleShowMarkers: (show: boolean, reservationData: FrontendReservationItem[]) => void;
+}
+
+interface FrontendReservationItem {
+    res_id: number;
+    order_number: number;        // 預約號碼 (前端計算或後端提供)
+    username: string;            // 💡 必須從 User 關係中取得
+    reserved_item_name: string;  // 💡 必須從 Item 關係中取得
+    reserved_quantity: number;   // 來自後端 Reservation.number_book
+    time_left_seconds: number;   // 💡 必須計算 reserve_at 到截止時間的剩餘時間
+    gps_latitude: number;        // 💡 必須從 User/Reservation 關係中取得
+    gps_longitude: number;       // 💡 必須從 User/Reservation 關係中取得
+    is_collected: boolean;       // 💡 必須從後端額外欄位或狀態判斷
+}
+
+interface ReservationListProps {
+    reservations: FrontendReservationItem[];
+    // 傳回 Home.tsx 控製地圖 Marker 的函式
+    onToggleShowMarkers: (show: boolean, reservationData: FrontendReservationItem[]) => void; 
 }
 
 // --- 模擬狀態 (實務上應從 API 獲取) ---
@@ -61,26 +87,157 @@ const handleShare = async (location: LocationData) => {
 
 // --- Provider 端顯示頁面 ---
 
-const MyFoodAccessView = () => {
-    // 驗證碼 TODO: 到時候應該會傳一個數字進來，再套進去路徑就好
-    const verificationIcon = require('../../assets/tree.png'); 
+// --- 輔助函式：將秒數轉換為 分:秒 格式 ---
+const formatTime = (totalSeconds: number) => {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+const ReservationListView = ({ reservations, onToggleShowMarkers }: ReservationListProps) => {
+    const [localReservations, setLocalReservations] = useState(reservations);
+
+    // 🚨 Marker 溝通邏輯：通知 Home.tsx 顯示或隱藏預約者位置
+    useEffect(() => {
+        // 在組件被渲染時，通知 Home.tsx 顯示 Marker
+        onToggleShowMarkers(true, reservations); 
+        
+        // 組件卸載時，通知 Home.tsx 隱藏 Marker
+        return () => {
+            onToggleShowMarkers(false, []);
+        };
+    }, [reservations, onToggleShowMarkers]);
+
+    // Provider 點擊打勾按鈕
+    const handleCollect = (resId: number) => {
+        Alert.alert(
+            "確認領取", 
+            "確定這份預約的食物已經交給這位使用者了嗎？",
+            [
+                { text: "取消", style: "cancel" },
+                { 
+                    text: "確認", 
+                    onPress: () => {
+                        // TODO: 呼叫 API 通知後端此筆預約已完成領取
+                        
+                        // 模擬更新本地狀態
+                        setLocalReservations(prev => 
+                            prev.map(r => 
+                                r.res_id === resId ? { ...r, is_collected: true } : r
+                            )
+                        );
+                        Alert.alert("領取成功", `已完成預約 ID ${resId} 的領取。`);
+                    }
+                }
+            ]
+        );
+    };
 
     return (
-        <View style={styles.noAccessContainer}>
-            {/* 左邊按鈕：預約列表 */}
-            <TouchableOpacity style={styles.disabledButton} onPress={() => Alert.alert("待實作", "導向預約列表")}>
-                <Text style={styles.disabledButtonText}>預約列表</Text>
-            </TouchableOpacity>
-
-            {/* 右邊：驗證碼區塊 */}
-            <View style={styles.noAccessRightContent}>
-                <Text style={styles.noAccessTitle}>您的驗證碼為</Text>
-                <Image 
-                    source={verificationIcon} 
-                    style={styles.noAccessImage}
-                />
-                <Text style={styles.noAccessNote}>請在領取者螢幕上點選相同符號</Text>
+        <View style={listStyles.listContainer}>
+            <View style={listStyles.listHeaderRow}>
+                <Text style={listStyles.headerCell}>#</Text>
+                <Text style={listStyles.headerCellUser}>使用者/品項</Text>
+                <Text style={listStyles.headerCellTime}>剩餘</Text>
+                <Text style={listStyles.headerCellAction}>領取</Text>
             </View>
+            
+            <FlatList
+                data={localReservations} 
+                keyExtractor={item => item.res_id.toString()}
+                renderItem={({ item }) => (
+                    <View style={[listStyles.reservationRow, item.is_collected && listStyles.collectedRow]}>
+                        
+                        {/* 號碼 */}
+                        <Text style={listStyles.cellNumber}>{item.order_number}</Text>
+                        
+                        {/* 使用者/品項 */}
+                        <View style={listStyles.cellUserContent}>
+                            <Text style={listStyles.userNameText}>{item.username}</Text>
+                            <Text style={listStyles.itemText}>
+                                {item.reserved_item_name} ({item.reserved_quantity} 份)
+                            </Text>
+                        </View>
+                        
+                        {/* 剩餘時間 */}
+                        <Text style={listStyles.cellTime}>
+                            {item.is_collected ? '已領取' : formatTime(item.time_left_seconds)}
+                        </Text>
+                        
+                        {/* 打勾按鈕 */}
+                        <TouchableOpacity 
+                            style={listStyles.collectButton}
+                            onPress={() => handleCollect(item.res_id)}
+                            disabled={item.is_collected}
+                        >
+                            <MaterialIcons 
+                                name="done" 
+                                size={28} 
+                                color={item.is_collected ? '#fff' : '#5CB85C'} 
+                                style={item.is_collected ? listStyles.collectedIcon : null}
+                            />
+                        </TouchableOpacity>
+                    </View>
+                )}
+                ListEmptyComponent={() => <Text style={listStyles.emptyText}>目前沒有進行中的預約。</Text>}
+            />
+        </View>
+    );
+};
+
+const ProviderFoodStatusView = ({ 
+    location, 
+    reservations, 
+    isLoadingReservations,
+    loadError,
+    onToggleShowMarkers 
+}: ProviderFoodStatusProps) => {
+
+    // 1. 計算所有品項的總剩餘數量（如果後端沒有提供這個總數）
+    const totalRemainingItems = location.food_items.reduce((sum, item) => sum + item.quantity, 0);
+
+    return (
+        <View style={styles.providerContentCard}>
+            
+            {/* 1. 貼文基本資訊 (地址與編輯按鈕) */}
+            <View style={styles.providerHeader}>
+                <Text style={styles.providerTitle}>貼文地址: {location.address}</Text>
+                <TouchableOpacity 
+                    onPress={() => Alert.alert("待實作", "導向編輯貼文頁面")}
+                    style={styles.editButton}
+                >
+                    <Ionicons name="create-outline" size={24} color="#333" />
+                </TouchableOpacity>
+            </View>
+
+            {/* 2. 剩餘品項列表 (Food Items) */}
+            <Text style={styles.sectionTitle}>剩餘品項 ({totalRemainingItems} 份)</Text>
+            
+            <View style={styles.remainingItemsContainer}>
+                {(location.food_items ?? []).map((food, index) => (
+                    <View key={index} style={styles.foodItemStatusRow}>
+                        <Text style={styles.foodItemStatusName}>{food.item_name}</Text>
+                        <Text style={styles.foodItemStatusRemaining}>剩餘 {food.quantity} 份</Text>
+                    </View>
+                ))}
+            </View>
+
+            {/* 3. 預約列表標題 */}
+            <Text style={[styles.sectionTitle, { marginTop: 20 }]}>進行中預約</Text>
+
+            {/* 4. 預約列表內容 (根據載入狀態顯示) */}
+            {isLoadingReservations ? (
+                <Text style={styles.loadingText}>載入預約中...</Text>
+            ) : loadError ? (
+                <Text style={styles.errorText}>載入失敗: {loadError}</Text>
+            ) : (
+                // 🚨 渲染 ReservationListView
+                <ReservationListView 
+                    reservations={reservations} 
+                    onToggleShowMarkers={onToggleShowMarkers} 
+                />
+            )}
+            
         </View>
     );
 };
@@ -216,75 +373,108 @@ const ReservedFoodView = ({ location }) => {
 
 // --- FoodDetailSheet ---
 
-export default function FoodDetailSheet({ location, handleClose, myUserId }: FoodDetailSheetProps) {
+export default function FoodDetailSheet({ location, handleClose, myUserId, onToggleShowMarkers }: FoodDetailSheetProps) {
     const router = useRouter();
     
     // 檢查是否為自己發布的食物
-    const isMyFood = myUserId === location.user_id;
+    // const isMyFood = myUserId === location.user_id;
+    const isMyFood = 1;
 
     // 檢查是否已預約 (模擬：如果 ID 是 2 則視為已預約)
-    const isReserved = !isMyFood && location.user_id === RESERVED_FOOD_ID;
+    // const isReserved = !isMyFood && location.user_id === RESERVED_FOOD_ID;
+    const isReserved = false;
+
+    // 狀態：延遲加載預約列表
+    const [reservations, setReservations] = useState<FrontendReservationItem[]>([]);
+    const [isLoadingReservations, setIsLoadingReservations] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (isMyFood && location.food_id) {
+            const foodId = location.food_id;
+            setIsLoadingReservations(true);
+
+            // 呼叫 API 並進行映射（假設 fetchReservationsByFood 已經修正）
+            fetchReservationsByFood(foodId)
+                .then(rawReservations => {
+                    // 執行數據映射（將 item, number_book 轉為 item_name, quantity, 並計算 GPS/時間）
+                    const mappedReservations: FrontendReservationItem[] = rawReservations.map((res, index) => ({
+                        res_id: res.reservation_id,
+                        order_number: index + 1,
+                        username: `預約者 ${res.user_id}`, 
+                        reserved_item_name: `預約 ItemID ${res.item_id} (數量: ${res.number_book})`, 
+                        reserved_quantity: res.number_book,
+                        time_left_seconds: 60 * 5, 
+                        gps_latitude: 24.78 + Math.random() * 0.005, 
+                        gps_longitude: 120.99 + Math.random() * 0.005, 
+                        is_collected: false, 
+                    }));
+                    setReservations(mappedReservations);
+                })
+                .catch(err => {
+                    console.error("Failed to load reservations:", err);
+                    setLoadError("無法載入預約列表。");
+                })
+                .finally(() => {
+                    setIsLoadingReservations(false);
+                });
+        }
+        
+        // 🚨 關鍵清理：當 Provider 視圖關閉或切換時，確保地圖上的 Marker 被移除
+        // 當 isMyFood 變為 false 或組件卸載時，通知父組件隱藏 Marker
+        return () => {
+             // 只有在是 Provider 且組件即將卸載時才調用
+             if(isMyFood) {
+                onToggleShowMarkers(false, []);
+             }
+        }
+    }, [isMyFood, location.food_id]);
+
+    // 4. Tab View 邏輯 (使用 reservations 狀態)
+    const [index, setIndex] = useState(0);
+    const [routes] = useState([
+        { key: 'info', title: '剩食資訊' },
+        { key: 'reservations', title: '預約列表' },
+    ]);
 
     return (
         <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
-            <View style={styles.receiverContentCard}>
-                {/* 1. 頂部資訊區塊 (左圖右文) */}
-                <View style={styles.topRow}>
-                    <Image source={location.image} style={styles.foodImage} />
-                    <View style={styles.infoRight}>
-                        {/* 關閉按鈕 */}
-                        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-                            <Ionicons name="close-outline" size={30} color="#333" />
-                        </TouchableOpacity>
-
-                        {/* 右上角編輯/分享按鈕 */}
-                        <View style={styles.topRightButtonContainer}>
-                            {isMyFood ? (
-                                <TouchableOpacity 
-                                    onPress={() => router.push('/(main)/newpost')} 
-                                    style={styles.iconButton}
-                                >
-                                    <Ionicons name="create-outline" size={24} color="#333" />
-                                </TouchableOpacity>
-                            ) : (
-                                <TouchableOpacity onPress={() => handleShare(location)} style={styles.iconButton}>
-                                    <Ionicons name="share-social-outline" size={24} color="#333" />
-                                </TouchableOpacity>
-                            )}
+            {isMyFood ? (
+                // 渲染 Provider 介面
+                <ProviderFoodStatusView
+                    location={location}
+                    reservations={reservations}
+                    isLoadingReservations={isLoadingReservations}
+                    loadError={loadError}
+                    onToggleShowMarkers={onToggleShowMarkers}
+                />
+            ) : (
+                // 渲染 Receiver 介面
+                <View style={styles.receiverContentCard}>
+                    {/* ... (頂部資訊、食物列表、底部動作區塊) ... */}
+                    {/* 這裡的 Section 2 食物列表依然使用 location.food_items */}
+                    
+                    {/* 2. 食物列表 */}
+                    {(location.food_items ?? []).map((food, index) => (
+                        <View key={index} style={styles.receiverFoodItemRow}>
+                            <Text style={styles.receiverFoodItemName}>{food.item_name}</Text>
+                            <Text style={styles.receiverFoodItemRemaining}>剩餘 {food.quantity} 份</Text>
                         </View>
-
-                        <Text style={styles.receiverTitle}>{location.address}</Text>
-                        <Text style={styles.receiverDetailText}>{location.note}</Text>
-                        <Text style={styles.receiverRuleText}>{`此食物規定在${location.time_restriction}分鐘內領取`}</Text>
-                        <Text style={styles.receiverDetailText}>{`(${location.updated_at} 分鐘前編輯)`}</Text>
-                    </View>
+                    ))}
+                    
+                    {/* 3. 底部動作區塊 */}
+                    {isReserved ? (
+                        <ReservedFoodView location={location} /> 
+                    ) : (
+                        <TouchableOpacity 
+                            style={styles.reserveButton}
+                            onPress={() => router.push({ pathname: '/(main)/reserve', params: { foodId: location.user_id.toString() } })} 
+                        >
+                            <Text style={styles.reserveButtonText}>預約剩食</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
-
-                {/* 2. 食物列表 */}
-                {(location.food_items ?? []).map((food, index) => (
-                    <View key={index} style={styles.receiverFoodItemRow}>
-                        <Text style={styles.receiverFoodItemName}>{food.item_name}</Text>
-                        <Text style={styles.receiverFoodItemRemaining}>剩餘 {food.quantity} 份</Text>
-                    </View>
-                ))}
-
-                <Text style={styles.receiverDetailTextNote}>數量僅供參考，剩餘數量以實際情況為主</Text>
-
-                {/* 3. 底部動作區塊 (根據狀態條件渲染) */}
-                {isMyFood ? (
-                    <MyFoodAccessView /> // 發布者專屬畫面
-                ) : isReserved ? (
-                    <ReservedFoodView location={location} /> // 預約者專屬畫面
-                ) : (
-                    // 未預約者畫面：預約按鈕 (如圖一底部)
-                    <TouchableOpacity
-                        style={styles.reserveButton}
-                        onPress={() => router.push({ pathname: '/(main)/reserve', params: { foodId: location.user_id.toString() } })} 
-                    >
-                        <Text style={styles.reserveButtonText}>預約剩食</Text>
-                    </TouchableOpacity>
-                )}
-            </View>
+            )}
         </ScrollView>
     );
 }
@@ -293,7 +483,7 @@ export default function FoodDetailSheet({ location, handleClose, myUserId }: Foo
 
 const styles = StyleSheet.create({
     receiverContentCard: {
-        paddingTop: 10,
+        paddingTop: 20,
     },
     topRow: {
         flexDirection: 'row',
@@ -309,18 +499,10 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingRight: 35, // 避免被右上角的關閉按鈕擋住
     },
-    closeButton: {
-        position: 'absolute',
-        top: -5,
-        right: -15,
-        zIndex: 10,
-        backgroundColor: 'white',
-        borderRadius: 15,
-    },
     topRightButtonContainer: {
         position: 'absolute',
         top: 0,
-        right: 20,
+        right: 0,
     },
     iconButton: {
         padding: 5,
@@ -562,5 +744,174 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 16,
         fontWeight: 'bold',
-    }
+    },
+
+    providerContentCard: {
+        paddingHorizontal: PADDING_HORIZONTAL,
+        paddingTop: 10,
+        backgroundColor: '#fff',
+        // 確保內容能夠在 ScrollView 中展開
+    },
+    providerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+    },
+    providerTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    editButton: {
+        padding: 5,
+    },
+
+    // --- 剩餘品項列表樣式 ---
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#555',
+        marginTop: 15,
+        marginBottom: 10,
+    },
+    remainingItemsContainer: {
+        padding: 10,
+        backgroundColor: '#F5F5F5',
+        borderRadius: 8,
+        marginBottom: 10,
+    },
+    foodItemStatusRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingVertical: 4,
+    },
+    foodItemStatusName: {
+        fontSize: 14,
+        color: '#333',
+        fontWeight: '500',
+    },
+    foodItemStatusRemaining: {
+        fontSize: 14,
+        color: '#888',
+        fontWeight: '600',
+    },
+
+    // --- 載入和錯誤狀態樣式 ---
+    loadingText: {
+        textAlign: 'center',
+        padding: 20,
+        color: '#888',
+    },
+    errorText: {
+        textAlign: 'center',
+        padding: 20,
+        color: 'red',
+        fontWeight: 'bold',
+    },
+});
+
+// --- ReservationListView 專用樣式 (listStyles) ---
+const listStyles = StyleSheet.create({
+    listContainer: {
+        flex: 1,
+        paddingBottom: 20,
+        minHeight: 100, // 確保列表在 ScrollView 中有最小高度
+    },
+    listHeaderRow: {
+        flexDirection: 'row',
+        paddingVertical: 10,
+        backgroundColor: '#F0F0F0',
+        borderRadius: 4,
+        marginBottom: 5,
+        paddingHorizontal: 10,
+    },
+    headerCell: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#555',
+        flex: 1,
+    },
+    headerCellUser: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#555',
+        flex: 2,
+    },
+    headerCellTime: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#555',
+        flex: 1.5,
+        textAlign: 'center',
+    },
+    headerCellAction: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#555',
+        flex: 1.2,
+        textAlign: 'center',
+    },
+    
+    reservationRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+        paddingHorizontal: 10,
+    },
+    collectedRow: {
+        backgroundColor: '#FAFAFA', // 已領取變淡色
+    },
+    
+    // Cell 樣式
+    cellNumber: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#007AFF', // 號碼突出顯示
+        flex: 0.8,
+        textAlign: 'center',
+    },
+    cellUserContent: {
+        flex: 2,
+    },
+    userNameText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#333',
+    },
+    itemText: {
+        fontSize: 12,
+        color: '#888',
+        marginTop: 2,
+    },
+    cellTime: {
+        flex: 1.5,
+        fontSize: 14,
+        color: '#FF6347', // 剩餘時間突出
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+
+    // 打勾按鈕樣式
+    collectButton: {
+        flex: 1.2,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 5,
+    },
+    collectedIcon: {
+        backgroundColor: '#5CB85C',
+        borderRadius: 15,
+        padding: 4,
+    },
+    emptyText: {
+        textAlign: 'center',
+        padding: 20,
+        color: '#888',
+        fontStyle: 'italic',
+    },
 });
