@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException   
 from sqlalchemy.orm import Session
 from datetime import datetime
+import random
 
 from ..db import get_db
 from .. import models, schemas
@@ -24,6 +25,7 @@ def create_post(post_in: schemas.PostCreate, db: Session = Depends(get_db)):
         gps_longitude=post_in.gps_longitude,
         time_restriction=post_in.time_restriction,
         distance_restriction=post_in.distance_restriction,
+        verification_icon=random.randint(1, 3),
     )
     db.add(post)
 

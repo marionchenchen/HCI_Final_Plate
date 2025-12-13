@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 
 
-# ---------- User ----------
+# ---------- User Schemas----------
 class UserCreate(BaseModel):
     email: str
     password: str
@@ -149,6 +149,15 @@ class ReservationsByFoodWithItem(BaseModel):
 
 
 
+class ReservationsByUserWithItem(BaseModel):
+    user_id: int
+    reservations: List[ReservationWithItem]
+
+
+class ReservationsByFoodWithItem(BaseModel):
+    food_id: int
+    reservations: List[ReservationWithItem]
+
 
 # ---------- Post Schemas ----------
 class PostCreate(BaseModel):
@@ -180,6 +189,7 @@ class Post(BaseModel):
 
     created_at: datetime 
     updated_at: datetime 
+    verification_icon: int
 
     items: List[Item] = []
     pictures: List[Picture] = []
