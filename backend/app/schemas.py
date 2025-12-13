@@ -2,6 +2,40 @@ from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import List, Optional
 
+
+# ---------- User ----------
+class UserCreate(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+    nickname: Optional[str] = None
+    profile_pic: Optional[str] = None
+    gps_latitude: Optional[float] = None
+    gps_longitude: Optional[float] = None
+
+class User(BaseModel):
+    user_id: int
+    email: str
+    name: Optional[str] = None
+    nickname: Optional[str] = None
+    profile_pic: Optional[str] = None
+    gps_latitude: Optional[float] = None
+    gps_longitude: Optional[float] = None
+
+    model_config = {"from_attributes": True}
+
+class UserLocationUpdate(BaseModel):
+    gps_latitude: float
+    gps_longitude: float
+
+class UserLocationRequest(BaseModel):
+    user_ids: List[int]
+
+class UserLocationResponse(BaseModel):
+    user_id: int
+    gps_latitude: float | None
+    gps_longitude: float | None
+
 # ---------- Item Schemas ----------
 class ItemCreate(BaseModel):
     item: str
@@ -45,6 +79,19 @@ class ReservationCreate(BaseModel):
     number_book: int
 
 
+class ItemBooking(BaseModel):
+    item_id: int
+    number_book: int
+
+
+class ReservationCreateMultiple(BaseModel):
+    user_id: int
+    food_id: int
+    gps_latitude: Optional[float] = None
+    gps_longitude: Optional[float] = None
+    items: List[ItemBooking]
+
+
 class Reservation(BaseModel):
     reservation_id: int
     user_id: int
@@ -52,6 +99,8 @@ class Reservation(BaseModel):
     item_id: int
     number_book: int
     reserve_at: datetime
+    gps_latitude: Optional[float] = None
+    gps_longitude: Optional[float] = None
 
     model_config = {"from_attributes": True}
 
@@ -59,26 +108,45 @@ class ReservationModify(BaseModel):
     modify: int  # 正數表示增加預約數量（會扣除 item.number_online），負數表示減少預約數量（會回補 item.number_online）
 
 
-    # 新增 User schemas
-class UserCreate(BaseModel):
-    email: str
-    password: str
-    name: Optional[str] = None
-    nickname: Optional[str] = None
-    profile_pic: Optional[str] = None
-    gps_latitude: Optional[float] = None
-    gps_longitude: Optional[float] = None
+class ReservationModifyItem(BaseModel):
+    item_id: int
+    new_amount: int
 
-class User(BaseModel):
+
+class ReservationModifyMultiple(BaseModel):
+    items: List[ReservationModifyItem]
+
+
+class ReservationsByUser(BaseModel):
     user_id: int
-    email: str
-    name: Optional[str] = None
-    nickname: Optional[str] = None
-    profile_pic: Optional[str] = None
+    reservations: List[Reservation]
+
+
+class ReservationWithItem(BaseModel):
+    reservation_id: int
+    user_id: int
+    food_id: int
+    item_id: int
+    item_name: str
     gps_latitude: Optional[float] = None
     gps_longitude: Optional[float] = None
+    number_book: int
+    reserve_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ReservationsByUserWithItem(BaseModel):
+    user_id: int
+    reservations: List[ReservationWithItem]
+
+
+class ReservationsByFoodWithItem(BaseModel):
+    food_id: int
+    reservations: List[ReservationWithItem]
+
+
+
 
 
 

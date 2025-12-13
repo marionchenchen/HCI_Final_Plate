@@ -487,7 +487,13 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, onTog
                     ) : (
                         <TouchableOpacity 
                             style={styles.reserveButton}
-                            onPress={() => router.push({ pathname: '/(main)/reserve', params: { foodId: location.user_id.toString() } })} 
+                            onPress={() => {
+                                router.push({ 
+                                    pathname: '/(main)/reserve', 
+                                    params: { food_id: location.food_id.toString() } 
+                                });
+                                // onClose(); // 關閉 Sheet
+                            }}
                         >
                             <Text style={styles.reserveButtonText}>預約剩食</Text>
                         </TouchableOpacity>

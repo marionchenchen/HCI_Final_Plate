@@ -352,8 +352,7 @@ export default function NewPostScreen() {
             pictures: picturesPayload,
         };
         
-        console.log("Payload sent to API:", JSON.stringify(postPayload, null, 2));
-
+        //console.log("Payload sent to API:", JSON.stringify(postPayload, null, 2));
 
         setIsLoading(true); 
 
