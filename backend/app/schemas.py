@@ -146,6 +146,19 @@ class ReservationsByFoodWithItem(BaseModel):
     reservations: List[ReservationWithItem]
 
 
+
+
+
+class ReservationsByUserWithItem(BaseModel):
+    user_id: int
+    reservations: List[ReservationWithItem]
+
+
+class ReservationsByFoodWithItem(BaseModel):
+    food_id: int
+    reservations: List[ReservationWithItem]
+
+
 # ---------- Post Schemas ----------
 class PostCreate(BaseModel):
     user_id: Optional [int] = None

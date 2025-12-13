@@ -4,12 +4,11 @@ import {
     TouchableOpacity, Alert, Dimensions, KeyboardAvoidingView, Platform, Image 
 } from 'react-native';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location'; 
 import * as ImagePicker from 'expo-image-picker';
-import { publishFoodPost } from '../../api';
+import { updatePost, getPostById } from '../../api';
 import { useUser } from "../../context/UserContext"
-import { usePostRefresh } from '../../context/PostRefreshContext';
 
 const { width } = Dimensions.get('window');
 const selectedTag = "中式";
@@ -218,22 +217,123 @@ const FoodItemInput = ({ index, foodItem, onFoodItemChange, onDelete }: { index:
 // --- 主畫面 ---
 
 export default function NewPostScreen() {
+    const { id } = useLocalSearchParams();
     const router = useRouter();
-    const { triggerRefresh } = usePostRefresh();
 
     // --- 狀態定義 ---
-    const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null); // 用於預覽的 URI
-    const [selectedImageBase64, setSelectedImageBase64] = useState<string | null>(null); // 用於 API 傳輸的 Base64
-    const [address, setAddress] = useState('工三一樓大廳');
-    const [foodItems, setFoodItems] = useState<FoodItemState[]>([
-        { item_name: '小木屋抹茶鬆餅', quantity: '6' } 
-    ]);
-    const [note, setNote] = useState('要自己帶容器喔！');
-    const [timeRestriction, setTimeRestriction] = useState('10'); // time_restriction (分鐘)
-    const [distanceRestriction, setDistanceRestriction] = useState('2'); // distance_restriction (公里)
+    const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+    const [selectedImageBase64, setSelectedImageBase64] = useState<string | null>(null);
+    const [address, setAddress] = useState('');
+    const [items, setItems] = useState([]);
+    const [note, setNote] = useState('');
+    const [tag, setTag] = useState('');
     
     const [isLoading, setIsLoading] = useState(false);
     const { userId, loading } = useUser();
+
+    // 讀取現有資料
+    useEffect(() => {
+        const initData = async () => {
+            try {
+                const data = await getPostById(id);
+                
+                
+                setTag(data.tag);
+                setNote(data.note);
+                setItems(data.items); 
+                // data.items 會包含 [{id: 1, name: '麵包', number_online: 5}, ...]
+            } catch (error: any) {
+                console.error("Loading Error:", error);
+                Alert.alert("載入失敗", `詳情: ${error.message || '未知錯誤。'}`);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        if (id) initData();
+    }, [id]);
+
+    // 送出修改
+    const handleUpdate = async () => {
+        try {
+            const payload = {
+                tag,
+                note,
+                items: items.map(it => ({
+                    id: it.id, // 必須傳回 id 讓後端知道是改哪一條
+                    number_online: it.number_online 
+                })),
+                // pictures: pictures 
+            };
+
+            await updatePost(id, payload);
+            alert("修改成功！");
+            router.back(); // 返回上一頁
+        } catch (error: any) {
+                console.error("Loading Error:", error);
+                Alert.alert("修改失敗", `詳情: ${error.message || '未知錯誤。'}`);
+        }
+    };
+
+    if (loading) return <Text>載入中...</Text>;
+
+    return (
+        <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+            <View style={styles.header}>
+                <TouchableOpacity onPress={pickImage} style={styles.imagePlaceholder}>
+                    {selectedImageUri ? (
+                        <Image source={{ uri: selectedImageUri }} style={styles.uploadedImage} />
+                    ) : (
+                        <>
+                            <FontAwesome name="camera" size={30} color="#BDBDBD" />
+                            <Text style={styles.imageText}>點擊上傳圖片</Text>
+                        </>
+                    )}
+                </TouchableOpacity>
+            </View>
+            
+            <View style={styles.formCard}>
+
+            <Text style={styles.label}><Ionicons name="location" size={18} color="#333" /> 詳細地點</Text>
+            <TextInput style={styles.input} value={address} onChangeText={setAddress} placeholder="例如：女二路易莎前圓桌" />
+            
+            <Text style={styles.label}><Ionicons name="document-text" size={18} color="#333" /> 剩食名稱與數量</Text>
+            
+            {foodItems.map((item, index) => (
+                <FoodItemInput 
+                key={index}
+                index={index}
+                foodItem={item}
+                onFoodItemChange={handleFoodItemChange}
+                onDelete={handleDeleteFoodItem}
+                />
+            ))}
+
+            <Text style={styles.label}><Ionicons name="create" size={18} color="#333" /> 備註</Text>
+            <TextInput 
+                style={styles.noteInput} 
+                value={note} 
+                onChangeText={setNote} 
+                multiline 
+                placeholder="請輸入備註，例如：領取容器規定..."
+            />
+            
+            <TouchableOpacity 
+                style={styles.publishButton} 
+                onPress={handleUpdate}
+            >
+                <Text style={styles.publishButtonText}>
+                    {isLoading ? "發布中..." : "確定發布剩食"}
+                </Text>
+            </TouchableOpacity>
+            </View>
+        </ScrollView>
+        </KeyboardAvoidingView>
+    );
     
     // GPS 狀態
     const [gpsLocation, setGpsLocation] = useState<{ latitude: number | null, longitude: number | null }>({ latitude: null, longitude: null });
@@ -352,13 +452,14 @@ export default function NewPostScreen() {
             pictures: picturesPayload,
         };
         
-        //console.log("Payload sent to API:", JSON.stringify(postPayload, null, 2));
+        console.log("Payload sent to API:", JSON.stringify(postPayload, null, 2));
+
 
         setIsLoading(true); 
 
         try {
             const newPost = await publishFoodPost(postPayload);
-            triggerRefresh();
+            
             Alert.alert("發布成功", `您的剩食貼文 (ID: ${newPost.food_id}) 已成功發布！`);
             router.back(); 
             
@@ -370,95 +471,4 @@ export default function NewPostScreen() {
             setIsLoading(false);
         }
     };
-
-    // --- Render ---
-    
-    return (
-        <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-            <View style={styles.header}>
-                <TouchableOpacity onPress={pickImage} style={styles.imagePlaceholder}>
-                    {selectedImageUri ? (
-                        <Image source={{ uri: selectedImageUri }} style={styles.uploadedImage} />
-                    ) : (
-                        <>
-                            <FontAwesome name="camera" size={30} color="#BDBDBD" />
-                            <Text style={styles.imageText}>點擊上傳圖片</Text>
-                        </>
-                    )}
-                </TouchableOpacity>
-            </View>
-            
-            <View style={styles.formCard}>
-
-            <Text style={styles.label}><Ionicons name="location" size={18} color="#333" /> 詳細地點</Text>
-            <TextInput style={styles.input} value={address} onChangeText={setAddress} placeholder="例如：女二路易莎前圓桌" />
-            
-            <Text style={styles.label}><Ionicons name="document-text" size={18} color="#333" /> 剩食名稱與數量</Text>
-            
-            {foodItems.map((item, index) => (
-                <FoodItemInput 
-                key={index}
-                index={index}
-                foodItem={item}
-                onFoodItemChange={handleFoodItemChange}
-                onDelete={handleDeleteFoodItem}
-                />
-            ))}
-
-            <TouchableOpacity style={styles.addFoodButton} onPress={handleAddFoodItem}>
-                <Text style={styles.addFoodText}>+</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.label}><Ionicons name="create" size={18} color="#333" /> 備註</Text>
-            <TextInput 
-                style={styles.noteInput} 
-                value={note} 
-                onChangeText={setNote} 
-                multiline 
-                placeholder="請輸入備註，例如：領取容器規定..."
-            />
-
-            <Text style={[styles.label, { marginTop: 20 }]}>預約規則設定</Text>
-            
-            <View style={styles.ruleContainer}>
-                <Ionicons name="time" size={20} color="#666" style={{ marginRight: 10 }} />
-                <Text style={styles.ruleText}>領取者若未在此時限內抵達，預約會被取消</Text>
-                <TextInput 
-                    style={styles.ruleInput} 
-                    keyboardType="numeric" 
-                    value={timeRestriction} 
-                    onChangeText={setTimeRestriction} 
-                />
-                <Text style={styles.unitText}>分鐘</Text>
-            </View>
-            
-            <View style={styles.ruleContainer}>
-                <Ionicons name="map" size={20} color="#666" style={{ marginRight: 10 }} />
-                <Text style={styles.ruleText}>僅開放此範圍內的預約</Text>
-                <TextInput 
-                    style={styles.ruleInput} 
-                    keyboardType="numeric" 
-                    value={distanceRestriction} 
-                    onChangeText={setDistanceRestriction} 
-                />
-                <Text style={styles.unitText}>公里</Text>
-            </View>
-            
-            <TouchableOpacity 
-                style={styles.publishButton} 
-                onPress={handlePublish}
-                disabled={isLoading || !gpsLocation.latitude}
-            >
-                <Text style={styles.publishButtonText}>
-                    {isLoading ? "發布中..." : "確定發布剩食"}
-                </Text>
-            </TouchableOpacity>
-            </View>
-        </ScrollView>
-        </KeyboardAvoidingView>
-    );
 }

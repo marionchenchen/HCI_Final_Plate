@@ -77,6 +77,43 @@ export async function fetchPosts() {
     }
 }
 
+// 取得單一貼文
+export const getPostById = async (foodId) => {
+    try {
+        const response = await fetch(`${BASE_URL}/posts/${foodId}`);
+        if (!response.ok) {
+            throw new Error('無法取得貼文資料');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('getPostById Error:', error);
+        throw error;
+    }
+};
+
+// 編輯貼文
+export const updatePost = async (foodId, postData) => {
+    try {
+        const response = await fetch(`${BASE_URL}/posts/${foodId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(postData),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || '更新貼文失敗');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('updatePost Error:', error);
+        throw error;
+    }
+};
+
 // 取得特定貼文的預約資訊
 export async function fetchReservationsByFood(foodId) {
     const response = await fetch(`${BASE_URL}/reservations/food/${foodId}`);
@@ -147,7 +184,45 @@ export async function fetchReservationsByUserAndFood(userId, foodId) {
     return filteredReservations;
 }
 
+// 創建預約
+export const createReservation = async (reservationData) => {
+    try {
+        const response = await fetch(`${BASE_URL}/reservations/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(reservationData),
+        });
 
+        if (!response.ok) {
+            // 🚨 修正點：嘗試讀取錯誤細節，如果失敗，則提供更通用的訊息
+            const errorData = await response.json().catch(() => ({ detail: '無法解析後端錯誤訊息' }));
+
+            let errorMessage = '預約失敗，請檢查輸入數量。';
+
+            // 檢查 FastAPI 預設的錯誤格式或我們期望的 detail
+            if (errorData.detail) {
+                // 如果 detail 是一個陣列 (例如 Pydantic 驗證錯誤)，則將其轉換為字串
+                if (Array.isArray(errorData.detail)) {
+                    // 🚨 這是最常見的 FastAPI 驗證錯誤格式，需要取出 msg
+                    errorMessage = errorData.detail.map(err => err.msg || JSON.stringify(err)).join('; ');
+                } else if (typeof errorData.detail === 'string') {
+                    errorMessage = errorData.detail;
+                } else {
+                    errorMessage = JSON.stringify(errorData.detail);
+                }
+            }
+            
+            throw new Error(errorMessage);
+        }
+
+        return await response.json(); 
+    } catch (error) {
+        console.error('createReservation Error:', error);
+        throw error;
+    }
+};
 
 
 
