@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { 
     View, Text, StyleSheet, ScrollView, 
     TouchableOpacity, Image, Alert, Dimensions, TextInput, FlatList 
@@ -52,18 +52,27 @@ interface ProviderFoodStatusProps {
 
 interface FrontendReservationItem {
     res_id: number;
-    order_number: number;        // 預約號碼 (前端計算或後端提供)
-    username: string;            // 💡 必須從 User 關係中取得
-    reserved_item_name: string;  // 💡 必須從 Item 關係中取得
-    reserved_quantity: number;   // 來自後端 Reservation.number_book
-    time_left_seconds: number;   // 💡 必須計算 reserve_at 到截止時間的剩餘時間
-    gps_latitude: number;        // 💡 必須從 User/Reservation 關係中取得
-    gps_longitude: number;       // 💡 必須從 User/Reservation 關係中取得
-    is_collected: boolean;       // 💡 必須從後端額外欄位或狀態判斷
+    user_id: number;
+    food_id: number;
+    item_id: number;
+    number_book: number;
+    // 希望傳進來的東西是list(item_id, item_name, number_book)
+    reserve_at: string;
+
+    //res_id: number;
+    //order_number: number;
+    //username: string; 
+    //reserved_item_name: string; 
+    //reserved_quantity: number;  
+    //time_left_seconds: number;
+    //gps_latitude: number;       
+    //gps_longitude: number;       
+    //is_collected: boolean; 
 }
 
 interface ReservationListProps {
     reservations: FrontendReservationItem[];
+    location: PostData;
     // 傳回 Home.tsx 控製地圖 Marker 的函式
     onToggleShowMarkers: (show: boolean, reservationData: FrontendReservationItem[]) => void; 
 }
@@ -94,8 +103,14 @@ const formatTime = (totalSeconds: number) => {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
-const ReservationListView = ({ reservations, onToggleShowMarkers }: ReservationListProps) => {
+const ReservationListView = ({ reservations, location, onToggleShowMarkers }: ReservationListProps) => {
     const [localReservations, setLocalReservations] = useState(reservations);
+
+    const itemMap = useMemo(() => {
+        // location.food_items 裡是 { id: 1, item_name: '麵包', ... }
+        if (!location || !location.food_items) return new Map();
+        return new Map(location.food_items.map(item => [item.id, item.item_name]));
+    }, [location]);
 
     // 🚨 Marker 溝通邏輯：通知 Home.tsx 顯示或隱藏預約者位置
     useEffect(() => {
@@ -149,11 +164,10 @@ const ReservationListView = ({ reservations, onToggleShowMarkers }: ReservationL
                     <View style={[listStyles.reservationRow, item.is_collected && listStyles.collectedRow]}>
                         
                         {/* 號碼 */}
-                        <Text style={listStyles.cellNumber}>{item.order_number}</Text>
+                        <Text style={listStyles.cellNumber}>{item.user_id}</Text>
                         
                         {/* 使用者/品項 */}
                         <View style={listStyles.cellUserContent}>
-                            <Text style={listStyles.userNameText}>{item.username}</Text>
                             <Text style={listStyles.itemText}>
                                 {item.reserved_item_name} ({item.reserved_quantity} 份)
                             </Text>
@@ -193,15 +207,11 @@ const ProviderFoodStatusView = ({
     onToggleShowMarkers 
 }: ProviderFoodStatusProps) => {
 
-    // 1. 計算所有品項的總剩餘數量（如果後端沒有提供這個總數）
-    const totalRemainingItems = location.food_items.reduce((sum, item) => sum + item.quantity, 0);
-
     return (
         <View style={styles.providerContentCard}>
             
             {/* 1. 貼文基本資訊 (地址與編輯按鈕) */}
             <View style={styles.providerHeader}>
-                <Text style={styles.providerTitle}>貼文地址: {location.address}</Text>
                 <TouchableOpacity 
                     onPress={() => Alert.alert("待實作", "導向編輯貼文頁面")}
                     style={styles.editButton}
@@ -211,7 +221,6 @@ const ProviderFoodStatusView = ({
             </View>
 
             {/* 2. 剩餘品項列表 (Food Items) */}
-            <Text style={styles.sectionTitle}>剩餘品項 ({totalRemainingItems} 份)</Text>
             
             <View style={styles.remainingItemsContainer}>
                 {(location.food_items ?? []).map((food, index) => (
@@ -234,6 +243,7 @@ const ProviderFoodStatusView = ({
                 // 🚨 渲染 ReservationListView
                 <ReservationListView 
                     reservations={reservations} 
+                    location={location}
                     onToggleShowMarkers={onToggleShowMarkers} 
                 />
             )}
@@ -430,13 +440,6 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, onTog
         }
     }, [isMyFood, location.food_id]);
 
-    // 4. Tab View 邏輯 (使用 reservations 狀態)
-    const [index, setIndex] = useState(0);
-    const [routes] = useState([
-        { key: 'info', title: '剩食資訊' },
-        { key: 'reservations', title: '預約列表' },
-    ]);
-
     return (
         <ScrollView contentContainerStyle={{ paddingBottom: 16 }}>
             {isMyFood ? (
@@ -451,8 +454,24 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, onTog
             ) : (
                 // 渲染 Receiver 介面
                 <View style={styles.receiverContentCard}>
-                    {/* ... (頂部資訊、食物列表、底部動作區塊) ... */}
-                    {/* 這裡的 Section 2 食物列表依然使用 location.food_items */}
+                    
+                    {/* 1. 頂部資訊區塊 (左圖右文) */}
+                    <View style={styles.topRow}>
+                        <Image source={location.image} style={styles.foodImage} />
+                        <View style={styles.infoRight}>
+                            {/* 右上角編輯/分享按鈕 */}
+                            <View style={styles.topRightButtonContainer}>
+                                <TouchableOpacity onPress={() => handleShare(location)} style={styles.iconButton}>
+                                        <Ionicons name="share-social-outline" size={24} color="#333" />
+                                    </TouchableOpacity>
+                            </View>
+
+                            <Text style={styles.receiverTitle}>{location.address}</Text>
+                            <Text style={styles.receiverDetailText}>{location.note}</Text>
+                            <Text style={styles.receiverRuleText}>{`此食物規定在${location.time_restriction}分鐘內領取`}</Text>
+                            <Text style={styles.receiverDetailText}>{`(${location.updated_at} 分鐘前編輯)`}</Text>
+                        </View>
+                    </View>
                     
                     {/* 2. 食物列表 */}
                     {(location.food_items ?? []).map((food, index) => (

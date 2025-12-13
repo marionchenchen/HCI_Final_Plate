@@ -1,6 +1,6 @@
 // api.js
 
-const BASE_URL = 'http://172.20.10.4:8000'; 
+const BASE_URL = 'http://172.18.14.64:8000'; 
 
 // 假設類型
 interface ItemPayload {
@@ -76,6 +76,43 @@ export async function fetchPosts() {
         throw error; 
     }
 }
+
+// 取得單一貼文
+export const getPostById = async (foodId) => {
+    try {
+        const response = await fetch(`${BASE_URL}/posts/${foodId}`);
+        if (!response.ok) {
+            throw new Error('無法取得貼文資料');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('getPostById Error:', error);
+        throw error;
+    }
+};
+
+// 編輯貼文
+export const updatePost = async (foodId, postData) => {
+    try {
+        const response = await fetch(`${BASE_URL}/posts/${foodId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(postData),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || '更新貼文失敗');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('updatePost Error:', error);
+        throw error;
+    }
+};
 
 // 取得特定貼文的預約資訊
 export async function fetchReservationsByFood(foodId) {

@@ -18,6 +18,7 @@ import { useRouter } from 'expo-router';
 import FoodDetailSheet from './FoodDetailSheet'; 
 import { fetchPosts } from "../../api";
 import { useUser } from "../../context/UserContext"
+import { usePostRefresh } from '../../context/PostRefreshContext';
 
 const LocalFoodImage = require('../../assets/pizza.jpg'); 
 const LocalTreeImage = require('../../assets/tree.png'); 
@@ -30,9 +31,9 @@ const MAX_SHEET_HEIGHT = 400;
 const FILTER_TAGS = ['中式', '日式', '西式', '甜點', '素食', '飲料', '熱食', '冷藏'];
 
 const locationOptions = {
-  accuracy: Location.Accuracy.Balanced,
-  // 您也可以加入 timeout 屬性來設定超時時間
-  // timeout: 10000, 
+    accuracy: Location.Accuracy.Balanced,
+    // 您也可以加入 timeout 屬性來設定超時時間
+    // timeout: 10000, 
 };
 
 
@@ -79,6 +80,7 @@ export default function Home() {
     const router = useRouter();
     const { userId, loading } = useUser();
     console.log("目前這台裝置的 user_id =", userId);
+    const { refreshKey } = usePostRefresh();
 
     const [posts, setPosts] = useState<PostData[]>([]); 
     const [isLoading, setIsLoading] = useState(true); // 新增載入狀態
@@ -147,7 +149,7 @@ export default function Home() {
         }
 
         loadPosts();
-    }, []); 
+    }, [refreshKey]); 
 
     const handleMarkerPress = (post: PostData) => {
         setSelectedPost(post);
