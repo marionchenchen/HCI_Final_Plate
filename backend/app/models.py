@@ -141,6 +141,9 @@ class Reservation(Base):
     number_book = Column(Integer)
     reserve_at = Column(DateTime, default=datetime.utcnow)
 
+    gps_latitude = Column(Float)
+    gps_longitude = Column(Float)
+
 
     user = relationship("User", back_populates="reservations")
     post = relationship("Post", back_populates="reservations")

@@ -1,6 +1,6 @@
 // api.js
 
-const BASE_URL = 'http://172.20.10.4:8000'; 
+const BASE_URL = 'http://172.18.14.66:8000'; 
 
 // 假設類型
 interface ItemPayload {
@@ -85,3 +85,70 @@ export async function fetchReservationsByFood(foodId) {
     }
     return response.json();
 }
+
+// 取得特定使用者的預約 food_id
+export async function fetchFoodIdByUser(userId) {
+    const response = await fetch(`${BASE_URL}/reservations/user/${userId}`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch reservation');
+    }
+    const reservation = await response.json();
+    console.log("Reservation data from API:", reservation);
+    return reservation.length > 0 ? reservation[0].food_id : null;
+}
+
+export async function fetchReserveInfoByUser(userId) {
+    const response = await fetch(`${BASE_URL}/reservations/user/${userId}`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch reservation');
+    }
+
+    const data = await response.json();
+    console.log("Reservation data from API:", data);
+
+    if (data.length === 0 || data[0].reservations.length === 0) {
+        return null;
+    }
+
+    const reservation = data[0].reservations[0];
+
+    return {
+        reserve_at: reservation.reserve_at,
+        number_book: reservation.number_book,
+    };
+}
+
+export async function fetchReservationsByUserAndFood(userId, foodId) {
+    const response = await fetch(`${BASE_URL}/reservations/user/${userId}`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch reservations by user');
+    }
+
+    const data = await response.json();
+    console.log("Reservation data from API:", data);
+
+    if (data.length === 0) return [];
+
+    // 過濾出指定 food_id 的 reservations
+    const filteredReservations = data.flatMap(userGroup =>
+        userGroup.reservations
+            .filter(r => r.food_id === foodId)
+            .map(r => ({
+                user_id: userGroup.user_id,
+                reservation_id: r.reservation_id,
+                item_name: r.item_name,
+                number_book: r.number_book,
+                reserve_at: r.reserve_at,
+                gps_latitude: r.gps_latitude,
+                gps_longitude: r.gps_longitude,
+            }))
+    );
+
+    return filteredReservations;
+}
+
+
+
+
+
+

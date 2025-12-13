@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import FoodDetailSheet from './FoodDetailSheet'; 
-import { fetchPosts } from "../../api";
+import { fetchPosts, fetchFoodIdByUser, fetchReservationsByUserAndFood } from "../../api";
 import { useUser } from "../../context/UserContext"
 
 const LocalFoodImage = require('../../assets/pizza.jpg'); 
@@ -81,6 +81,7 @@ export default function Home() {
     console.log("目前這台裝置的 user_id =", userId);
 
     const [posts, setPosts] = useState<PostData[]>([]); 
+    const [userFoodId, setUserFoodId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true); // 新增載入狀態
     const [error, setError] = useState<string | null>(null); // 新增錯誤狀態
 
@@ -148,6 +149,26 @@ export default function Home() {
 
         loadPosts();
     }, []); 
+
+    // 獲取所有預約剩食(呼叫 API)
+    useEffect(() => {
+        if (!userId) return;
+
+        const loadUserFood = async () => {
+            try {
+                const foodId = await fetchFoodIdByUser(userId);
+                setUserFoodId(foodId);
+                console.log("User's reserved food_id:", foodId);
+            } catch (err) {
+                console.error("Failed to fetch user's reservation:", err);
+            }
+        };
+
+        loadUserFood();
+    }, [userId]);
+
+    // const reservations = await fetchReservationsByUserAndFood(1, 2);
+    // console.log(reservations);
 
     const handleMarkerPress = (post: PostData) => {
         setSelectedPost(post);
@@ -287,6 +308,7 @@ export default function Home() {
                         location={selectedPost}
                         handleClose={handleClose}
                         myUserId={userId}
+                        IsReserved={userFoodId === selectedPost.food_id}
                         onToggleShowMarkers={handleToggleReservationMarkers}
                     />
                 </Animated.View>
