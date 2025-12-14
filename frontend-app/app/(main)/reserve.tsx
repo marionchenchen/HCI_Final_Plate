@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ImageSourcePropType } from 'react-native';
 import { useUser } from '../../context/UserContext';
-import { createReservation, getPostById } from '../../api';
+import { createReservation, getPostById, fetchCommentsByFoodId } from '../../api';
 import { usePostRefresh } from "../../context/PostRefreshContext";
 
 const { width } = Dimensions.get('window');
@@ -115,31 +115,51 @@ export default function ReserveQuantityScreen() {
         })();
     }, []);
 
+    // 評論
     const [comments, setComments] = useState<any[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [isCommentsLoading, setIsCommentsLoading] = useState(true);
+    const [commentError, setCommentError] = useState<string | null>(null);
     
     useEffect(() => {
-        (async () => {
+        if (!food_id) return; // 確保 foodId 存在
+
+        const loadComments = async () => {
+            setIsCommentsLoading(true);
+            setCommentError(null);
             try {
-                const response = await fetch(`${BASE_URL}/pickup/comments/${food_id}`);
-                if (!response.ok) throw new Error('Failed to fetch comments');
-                const data = await response.json();
-                const commentsOnly = data.map((c: any) => c.comment);
-                setComments(commentsOnly);
-                console.log('Fetched comments:', data); // 直接 log
+                const fetchedComments = await fetchCommentsByFoodId(food_id);
+                setComments(fetchedComments);
             } catch (err) {
-                Alert.alert('錯誤', String(err));
+                console.error("Failed to load comments:", err);
+                setCommentError("無法載入評論，請檢查網絡或伺服器狀態。");
+            } finally {
+                setIsCommentsLoading(false);
             }
-        })();
+        };
+
+        loadComments();
     }, [food_id]);
 
     const handlePrev = () => {
-        setCurrentIndex(prev => (prev > 0 ? prev - 1 : prev));
+        if (comments.length > 0) {
+            setCurrentIndex(prev => (prev - 1 + comments.length) % comments.length);
+        }
     };
 
     const handleNext = () => {
-        setCurrentIndex(prev => (prev < comments.length - 1 ? prev + 1 : prev));
+        if (comments.length > 0) {
+            setCurrentIndex(prev => (prev + 1) % comments.length);
+        }
     };
+
+    const currentCommentText = isCommentsLoading
+        ? "正在載入評論..."
+        : commentError
+        ? commentError
+        : comments.length > 0
+        ? comments[currentIndex].comment
+        : "目前沒有評論";
     
 
     // 處理輸入數量改變
@@ -238,7 +258,7 @@ export default function ReserveQuantityScreen() {
                 {/* 圖片與主要資訊 */}
                 <View style={styles.quantityInfo}>
                     <Image 
-                        source={mainImageSource} 
+                        source={postData.image}
                         style={styles.quantityInfoImage}
                     />
                     <Text style={styles.quantityInfoTitle}>{postData.address}</Text> 
@@ -249,17 +269,26 @@ export default function ReserveQuantityScreen() {
                 {/* 評論區 */}
                 <Text style={styles.commentLabel}>其他人對這份食物的評論</Text>
                 <View style={styles.commentBox}>
-                    <TouchableOpacity onPress={handlePrev}>
+                    {/* 箭頭：只有當評論數量大於 1 且載入完成時才啟用 */}
+                    <TouchableOpacity 
+                        onPress={handlePrev} 
+                        disabled={comments.length <= 1 || isCommentsLoading || !!commentError}
+                    >
                         <Ionicons name="caret-back" size={24} color="#333" />
                     </TouchableOpacity>
 
                     <TextInput
                         style={styles.commentInput}
-                        value={comments[currentIndex] || ''}
+                        value={currentCommentText} // ⭐️ 替換為計算出的當前評論或狀態訊息
                         editable={false}
+                        multiline={true} // 允許顯示多行評論
                     />
 
-                    <TouchableOpacity onPress={handleNext}>
+                    {/* 箭頭：只有當評論數量大於 1 且載入完成時才啟用 */}
+                    <TouchableOpacity 
+                        onPress={handleNext}
+                        disabled={comments.length <= 1 || isCommentsLoading || !!commentError}
+                    >
                         <Ionicons name="caret-forward" size={24} color="#333" />
                     </TouchableOpacity>
                 </View>

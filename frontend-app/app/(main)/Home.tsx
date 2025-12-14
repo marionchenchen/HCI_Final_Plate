@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
     Text,
@@ -105,45 +105,67 @@ export default function Home() {
         })();
     }, []);
 
-    // 獲取所有剩食資訊(呼叫 API)
-    useEffect(() => {
-        async function loadPosts() {
-            try {
-                setIsLoading(true);
-                setError(null);
+    const loadPosts = useCallback(async (isPolling = false) => {
+        if (!isPolling) {
+             setIsLoading(true);
+        }
+        setError(null);
+        
+        try {
+            
+            const apiPosts = await fetchPosts(); 
+            
+            // 資料格式轉換
+            const transformedPosts = apiPosts.map(post => {
+                const apiPost = post as any;
                 
-                const apiPosts = await fetchPosts(); 
+                const transformedFoodItems = (apiPost.items || []).map(item => ({
+                    item_name: item.item, 
+                    quantity: item.number_online, 
+                }));
                 
-                // 資料格式轉換
-                // 後端返回的 Post 結構可能缺少 color 和 image 欄位 <- 這啥意思 (但感覺暫時沒問題，先不要管)
-                const transformedPosts: PostData[] = apiPosts.map(post => {
-                    const apiPost = post as any;
-                    
-                    const transformedFoodItems = (apiPost.items || []).map(item => ({
-                        item_name: item.item, 
-                        quantity: item.number_online, 
-                    }));
-                    
-                    return {
-                        ...apiPost,
-                        food_items: transformedFoodItems, 
-                        image: apiPost.pictures && apiPost.pictures.length > 0 
-                            ? { uri: `data:image/jpeg;base64,${apiPost.pictures[0].picture}` } 
-                            : LocalFoodImage, 
-                    };
-                });
-                setPosts(transformedPosts);
-            } catch (err) {
-                console.error("Failed to load posts:", err);
-                setError("無法加載貼文，請檢查網絡或伺服器狀態。");
+                return {
+                    ...apiPost,
+                    food_items: transformedFoodItems, 
+                    image: apiPost.pictures && apiPost.pictures.length > 0 
+                        ? { uri: `data:image/jpeg;base64,${apiPost.pictures[0].picture}` } 
+                        : LocalFoodImage, 
+                };
+            });
+            
+            setPosts(transformedPosts);
+            
+        } catch (err) {
+            console.error("Failed to load posts:", err);
+            setError("無法加載貼文，請檢查網絡或伺服器狀態。");
+            if (!isPolling) { 
                 Alert.alert("加載失敗", "無法從伺服器取得貼文。");
-            } finally {
+            }
+        } finally {
+            if (!isPolling) {
                 setIsLoading(false);
             }
         }
+    }, [setIsLoading, setError, setPosts, fetchPosts, LocalFoodImage]);
 
+    // Provider端即時更新
+    useEffect(() => {
+        console.log(`本地刷新事件觸發 (Key: ${refreshKey})`);
         loadPosts();
-    }, [refreshKey]); 
+    }, [refreshKey, loadPosts]);
+
+    // Receiver端定時重抓
+    useEffect(() => {
+        const pollingInterval = setInterval(() => {
+            loadPosts(true); 
+        }, 5000);
+
+        return () => {
+            console.log("輪詢計時器已清除。");
+            clearInterval(pollingInterval);
+        };
+
+    }, [loadPosts]);
 
     // 獲取所有預約剩食(呼叫 API)
     useEffect(() => {
@@ -303,7 +325,6 @@ export default function Home() {
                         location={selectedPost}
                         handleClose={handleClose}
                         myUserId={userId}
-                        IsReserved={userFoodId === selectedPost.food_id}
                         onToggleShowMarkers={handleToggleReservationMarkers}
                     />
                 </Animated.View>

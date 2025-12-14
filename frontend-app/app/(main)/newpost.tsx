@@ -12,7 +12,6 @@ import { useUser } from "../../context/UserContext"
 import { usePostRefresh } from '../../context/PostRefreshContext';
 
 const { width } = Dimensions.get('window');
-const selectedTag = "中式";
 
 interface FoodItemState {
     item_name: string;
@@ -224,13 +223,13 @@ export default function NewPostScreen() {
     // --- 狀態定義 ---
     const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null); // 用於預覽的 URI
     const [selectedImageBase64, setSelectedImageBase64] = useState<string | null>(null); // 用於 API 傳輸的 Base64
-    const [address, setAddress] = useState('工三一樓大廳');
+    const [address, setAddress] = useState('');
     const [foodItems, setFoodItems] = useState<FoodItemState[]>([
-        { item_name: '小木屋抹茶鬆餅', quantity: '6' } 
+        { item_name: '', quantity: '' } 
     ]);
-    const [note, setNote] = useState('要自己帶容器喔！');
-    const [timeRestriction, setTimeRestriction] = useState('10'); // time_restriction (分鐘)
-    const [distanceRestriction, setDistanceRestriction] = useState('2'); // distance_restriction (公里)
+    const [note, setNote] = useState('');
+    const [timeRestriction, setTimeRestriction] = useState(''); // time_restriction (分鐘)
+    const [distanceRestriction, setDistanceRestriction] = useState(''); // distance_restriction (公里)
     
     const [isLoading, setIsLoading] = useState(false);
     const { userId, loading } = useUser();
@@ -261,8 +260,7 @@ export default function NewPostScreen() {
         })();
     }, []);
 
-    // --- 🌟 修正: 圖片選擇函式 ---
-    // 確保 Base64 數據被正確存儲，用於 API 傳輸
+    // --- 圖片選擇函式 ---
     const pickImage = async () => {
         // 請求媒體庫權限
 
@@ -277,12 +275,11 @@ export default function NewPostScreen() {
             allowsEditing: true, 
             aspect: [4, 3], 
             quality: 0.5, 
-            base64: true, // 🌟 請求 Base64 編碼
+            base64: true,
         });
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
             setSelectedImageUri(result.assets[0].uri); 
-            // 🌟 存儲 Base64 數據
             setSelectedImageBase64(result.assets[0].base64); 
         }
     };
@@ -296,12 +293,10 @@ export default function NewPostScreen() {
     };
 
     const handleAddFoodItem = () => {
-        // 限制新增空項目，除非前一個已填寫
         if (foodItems.length > 0 && (!foodItems[foodItems.length - 1].item_name || !foodItems[foodItems.length - 1].quantity)) {
             Alert.alert("提醒", "請先填寫完畢當前項目！");
             return;
         }
-        // 🌟 修正: 使用 item_name
         setFoodItems([...foodItems, { item_name: '', quantity: '' }]); 
     };
 
@@ -317,7 +312,9 @@ export default function NewPostScreen() {
             !gpsLocation.latitude || 
             foodItems.every(item => !item.item_name || !item.quantity) ||
             !selectedImageBase64 ||
-            !address
+            !address ||
+            !timeRestriction ||
+            !distanceRestriction
         ) {
             Alert.alert("警告", "請填寫所有必填欄位 (地點、至少一個食物項目、圖片、GPS定位)。");
             return;
@@ -339,7 +336,6 @@ export default function NewPostScreen() {
         const postPayload = {
             user_id: userId,
             address: address,
-            tag: selectedTag,
             note: note,
             
             gps_latitude: gpsLocation.latitude!,
@@ -432,6 +428,7 @@ export default function NewPostScreen() {
                     keyboardType="numeric" 
                     value={timeRestriction} 
                     onChangeText={setTimeRestriction} 
+                    placeholder="10"
                 />
                 <Text style={styles.unitText}>分鐘</Text>
             </View>
@@ -444,6 +441,7 @@ export default function NewPostScreen() {
                     keyboardType="numeric" 
                     value={distanceRestriction} 
                     onChangeText={setDistanceRestriction} 
+                    placeholder="1"
                 />
                 <Text style={styles.unitText}>公里</Text>
             </View>

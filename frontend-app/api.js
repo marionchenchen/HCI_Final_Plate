@@ -1,6 +1,6 @@
 // api.js
 
-const BASE_URL = 'http://172.18.11.163:8000'; 
+const BASE_URL = 'http://172.20.10.4:8000'; 
 
 // 發布貼文
 export async function publishFoodPost(payload) {
@@ -99,7 +99,7 @@ export async function fetchReservationsByFood(foodId) {
     return response.json();
 }
 
-// 取得特定使用者的預約 food_id
+// 取得特定使用者預約貼文的ID
 export async function fetchFoodIdByUser(userId) {
     const response = await fetch(`${BASE_URL}/reservations/user/${userId}`);
     if (!response.ok) {
@@ -197,6 +197,32 @@ export const createReservation = async (reservationData) => {
     }
 };
 
+// 修改預約
+export const modifyReservation = async (foodId, userId, payload) => {
+    //console.log('API Payload:', JSON.stringify(payload, null, 2));
+
+    try {
+        const response = await fetch(`${BASE_URL}/reservations/food/${foodId}/user/${userId}/modify`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }
+        );
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Failed to update reservations due to server error.');
+        }
+
+        const statusList = await response.json();
+        return statusList;
+
+    } catch (error) {
+        console.error("modifyReservation API Error:", error);
+        throw error;
+    }
+};
+
 // 領取成功
 export async function pickupSuccess(userId, foodId, comment = "") {
     try {
@@ -222,6 +248,40 @@ export async function pickupSuccess(userId, foodId, comment = "") {
     }
 }
 
+// 領取失敗
+export async function pickupFail(userId, foodId) {
+    if (!userId || !foodId) {
+        console.error("User ID and Food ID are required for pickupFail.");
+        throw new Error("Missing required parameters for pickup cancellation.");
+    }
+
+    const url = `${BASE_URL}/pickup/pickup/fail`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userId,
+                food_id: foodId,
+            }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.detail || `API error: ${response.status} ${response.statusText}`);
+        }
+
+        console.log("Pickup Failed API success:", result);
+        return result;
+
+    } catch (error) {
+        console.error("Error during pickup failure submission:", error);
+        throw error;
+    }
+}
+
 export async function fetchWarningTimes(userId, foodId) {
     const response = await fetch(`${BASE_URL}/pickup/food/${foodId}/user/${userId}`);
 
@@ -234,4 +294,29 @@ export async function fetchWarningTimes(userId, foodId) {
 
     // 保險寫法，避免 undefined
     return warning?.warning_times ?? 0;
+}
+
+// 查看評論
+export async function fetchCommentsByFoodId(foodId) {
+    if (!foodId) {
+        throw new Error("Food ID is required to fetch comments.");
+    }
+    
+    const url = `${BASE_URL}/pickup/comments/${foodId}`;
+
+    try {
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch comments for food_id ${foodId}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        return data;
+
+    } catch (error) {
+        console.error("Error fetching comments:", error);
+        throw error;
+    }
 }
