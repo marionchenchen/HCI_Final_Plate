@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ImageSourcePropType } from 'react-native';
 import { useUser } from '../../context/UserContext';
-import { createReservation, getPostById } from '../../api';
+import { createReservation, getPostById, BASE_URL } from '../../api';
 
 const { width } = Dimensions.get('window');
 
@@ -112,6 +112,33 @@ export default function ReserveQuantityScreen() {
         })();
     }, []);
 
+    const [comments, setComments] = useState<any[]>([]);
+    const [currentIndex, setCurrentIndex] = useState(0);
+    
+    useEffect(() => {
+        (async () => {
+            try {
+                const response = await fetch(`${BASE_URL}/pickup/comments/${food_id}`);
+                if (!response.ok) throw new Error('Failed to fetch comments');
+                const data = await response.json();
+                const commentsOnly = data.map((c: any) => c.comment);
+                setComments(commentsOnly);
+                console.log('Fetched comments:', data); // 直接 log
+            } catch (err) {
+                Alert.alert('錯誤', String(err));
+            }
+        })();
+    }, [food_id]);
+
+    const handlePrev = () => {
+        setCurrentIndex(prev => (prev > 0 ? prev - 1 : prev));
+    };
+
+    const handleNext = () => {
+        setCurrentIndex(prev => (prev < comments.length - 1 ? prev + 1 : prev));
+    };
+    
+
     // 處理輸入數量改變
     const handleQuantityChange = (itemId: number, quantity: string) => {
         const cleanedQuantity = quantity.replace(/[^0-9]/g, '');
@@ -213,6 +240,24 @@ export default function ReserveQuantityScreen() {
                     <Text style={styles.quantityInfoTitle}>{postData.address}</Text> 
                     <Text style={styles.quantityInfoDetail}>{postData.note}</Text>
                     <Text style={styles.quantityInfoDetail}>{`此食物規定在${postData.time_restriction}分鐘內領取`}</Text>
+                </View>
+
+                {/* 評論區 */}
+                <Text style={styles.commentLabel}>其他人對這份食物的評論</Text>
+                <View style={styles.commentBox}>
+                    <TouchableOpacity onPress={handlePrev}>
+                        <Ionicons name="caret-back" size={24} color="#333" />
+                    </TouchableOpacity>
+
+                    <TextInput
+                        style={styles.commentInput}
+                        value={comments[currentIndex] || ''}
+                        editable={false}
+                    />
+
+                    <TouchableOpacity onPress={handleNext}>
+                        <Ionicons name="caret-forward" size={24} color="#333" />
+                    </TouchableOpacity>
                 </View>
 
                 {/* 預約數量區塊 */}

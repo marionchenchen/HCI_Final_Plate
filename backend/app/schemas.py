@@ -113,6 +113,15 @@ class ReservationModifyItem(BaseModel):
     new_amount: int
 
 
+class ReservationModifyStatus(BaseModel):
+    item_id: int
+    is_valid: bool
+    error_type: Optional[str] = None
+    current_number_book: Optional[int] = None
+    requested_number_book: Optional[int] = None
+
+
+
 class ReservationModifyMultiple(BaseModel):
     items: List[ReservationModifyItem]
 

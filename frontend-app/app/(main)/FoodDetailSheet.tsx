@@ -8,6 +8,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Share, ImageSourcePropType } from 'react-native';
 import { fetchReservationsByFood, fetchReserveInfoByUser, BASE_URL, fetchWarningTimes } from "../../api";
 import * as Location from 'expo-location'; // here
+import * as FileSystem from 'expo-file-system'; // here2
 
 const PADDING_HORIZONTAL = 18;
 
@@ -89,6 +90,73 @@ interface ReservationGroup {
     reserved_items: GroupedReservedItem[]; 
     is_collected: boolean; 
 }
+
+// --- 共享函式 --- here2
+
+// async function sharePostWithImage({
+//   base64Image,
+//   address,
+//   foodItems,
+// }: {
+//   base64Image: string | undefined; // 允許 undefined
+//   address: string;
+//   foodItems: { item_name: string }[];
+// }) {
+//   try {
+//     if (!base64Image) {
+//       Alert.alert("分享失敗", "沒有可用的圖片");
+//       return;
+//     }
+
+//     // 1. 組合分享文字
+//     const itemsText = foodItems.map(f => f.item_name).join('、');
+//     const message = `我在「${address}」發現了 ${itemsText}，快來一決剩 food！`;
+
+//     // 2. 確保 base64 沒有 header
+//     const pureBase64 = base64Image.includes(',')
+//       ? base64Image.split(',')[1]
+//       : base64Image;
+
+//     // 3. 存成暫存檔案
+//     const fileUri = FileSystem.cacheDirectory + 'share_food.jpg';
+//     await FileSystem.writeAsStringAsync(
+//       fileUri,
+//       pureBase64,
+//       { encoding: FileSystem.EncodingType.Base64 }
+//     );
+
+//     // 4. 呼叫系統分享
+//     await Share.share({
+//       message,
+//       url: fileUri,
+//     });
+//   } catch (err) {
+//     Alert.alert('分享失敗', String(err));
+//   }
+// }
+
+async function sharePost({
+  address,
+  foodItems,
+}: {
+  address: string;
+  foodItems: { item_name: string }[];
+}) {
+  try {
+    // 1. 組合分享文字
+    const itemsText = foodItems.map(f => f.item_name).join('、');
+    const message = `我在「${address}」發現了 ${itemsText}，快來一決剩 food！`;
+
+    // 2. 直接分享文字
+    await Share.share({
+      message,
+    });
+  } catch (err) {
+    Alert.alert('分享失敗', String(err));
+  }
+}
+
+
 
 interface ReservationListProps {
     reservations: ReservationGroup[];
@@ -296,6 +364,7 @@ const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewPr
                 if (prev <= 0) {
                     clearInterval(timer);
                     Alert.alert("時間到", "您的預約已自動取消");
+                    pickupFailed(user_id, location.food_id);
                     return 0;
                 }
                 return prev - 1;
@@ -377,70 +446,64 @@ const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewPr
     }
 
     const handleSave = async () => {
-    // 驗證每個 item 數量不超過庫存
-        for (let item of reservationItems) {
-            const foodItem = location.food_items.find(
-                f => f.item_name === item.item_name
-            );
-            if (!foodItem) continue;
-
-            const originalItem = originalReservationItems.find(
-                o => o.item_id === item.item_id
-            );
-            if (!originalItem) continue;
-
-            const maxAllowed =
-                originalItem.number_book + foodItem.quantity;
-
-            if (item.number_book > maxAllowed) {
-                Alert.alert(
-                '數量錯誤',
-                `${item.item_name} 最多只能預約 ${maxAllowed} 份`
-                );
-                return;
-            }
-        }
-
-        // 準備要送到後端的資料
-        const payload = {
-            items: reservationItems.map(item => ({
-                item_id: item.item_id,
-                new_amount: Number(item.number_book),
-            })),
-        };
-
-        console.log('payload:', JSON.stringify(payload, null, 2));
-        try {
-            const response = await fetch(
-                `${BASE_URL}/reservations/food/${location.food_id}/user/${user_id}/modify`,
-                {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                }
-            );
-            if (!response.ok) throw new Error('Failed to update reservations');
-
-            const updated = await response.json();
-            Alert.alert(
-            "已成功更改預約數量!",
-            // JSON.stringify(updated, null, 2)
-            );
-
-
-            setIsEditing(false); // 完成編輯
-            setReservationItems(updated.map(r => ({
-                item_id: r.item_id,
-                item_name: r.item_name,
-                number_book: r.number_book
-            })));
-        } catch (error) {
-            console.error(error);
-            Alert.alert('更新失敗', error.message);
-        }
+    const payload = {
+        items: reservationItems.map(item => ({
+            item_id: item.item_id,
+            new_amount: Number(item.number_book),
+        })),
     };
 
+    console.log('payload:', JSON.stringify(payload, null, 2));
 
+    try {
+        const response = await fetch(
+            `${BASE_URL}/reservations/food/${location.food_id}/user/${user_id}/modify`,
+            {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }
+        );
+
+        if (!response.ok) throw new Error('Failed to update reservations');
+
+        const statusList: any[] = await response.json();
+
+        // 檢查是否有任一失敗
+        const anyInvalid = statusList.some(s => !s.is_valid);
+
+        if (anyInvalid) {
+            // 後端驗證失敗 → 文字框維持原數量
+            const firstError = statusList.find(s => !s.is_valid);
+            Alert.alert(
+                "更新失敗",
+                firstError?.error_type || "修改預約失敗"
+            );
+        } else {
+            // 全部成功才更新前端數量
+            // setReservationItems(
+            //     statusList.map(s => ({
+            //         item_id: s.item_id,
+            //         item_name: reservationItems.find(r => r.item_id === s.item_id)?.item_name || '',
+            //         number_book: s.requested_number_book, // 更新成新的數量
+            //     }))
+            // );
+
+            Alert.alert("成功", "已成功更改預約數量!");
+        }
+
+        setIsEditing(false);
+    } catch (error) {
+        console.error(error);
+        Alert.alert('更新失敗', error.message);
+    }
+};
+
+
+
+
+
+  
    useEffect(() => {
     // 只在狀態為 reserved 時抓資料
     if (status === 'reserved') {
@@ -461,7 +524,7 @@ const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewPr
             }));
 
             setReservationItems(items); // 自動更新 state
-            setOriginalReservationItems(items);
+            
             console.log('Item names and number booked:', items);
           }
         } catch (error) {
@@ -816,6 +879,7 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
     const canReserve = userLocation &&isWithinDistance &&warningTimes < 2;
 
     return (
+        <ScrollView>
         <View style={{ paddingBottom: 16 }}>
             {isMyFood ? (
                 // 渲染 Provider 介面
@@ -833,7 +897,15 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
                         <View style={styles.infoRight}>
                             {/* 右上角編輯/分享按鈕 */}
                             <View style={styles.topRightButtonContainer}>
-                                <TouchableOpacity onPress={() => handleShare(location)} style={styles.iconButton}>
+                                <TouchableOpacity // here2
+                                    onPress={() =>
+                                        sharePost({
+                                            // base64Image: location.image, // 你的 base64
+                                            address: location.address,
+                                            foodItems: location.food_items,
+                                        })
+                                    }
+                                > 
                                         <Ionicons name="share-social-outline" size={24} color="#333" />
                                     </TouchableOpacity>
                             </View>
@@ -899,6 +971,7 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
                 </View>
             )}
         </View>
+        </ScrollView>
     );
 }
 

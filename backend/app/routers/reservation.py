@@ -98,29 +98,35 @@ def create_reservation(reservation_in: schemas.ReservationCreateMultiple, db: Se
 # -------------------------
 # 2-1-2: 修改預約（多品項，依 food_id + user_id）
 # -------------------------
-@router.patch("/food/{food_id}/user/{user_id}/modify", response_model=list[schemas.Reservation])
+@router.patch("/food/{food_id}/user/{user_id}/modify", response_model=list[schemas.ReservationModifyStatus])
 def modify_reservations_bulk(food_id: int, user_id: int, modify_in: schemas.ReservationModifyMultiple, db: Session = Depends(get_db)):
     """同一筆貼文的多個預約一次調整，基於 food_id 與 user_id。
+
 
     傳入的是「新的預約數量」而非增量，會將每個 item 的 reservation.number_book 設為指定的新值，並相應調整 item.number_online。
     """
 
+
     if not modify_in.items:
         raise HTTPException(status_code=400, detail="No items provided for modification")
+
 
     # 確認貼文與使用者存在
     post = db.query(models.Post).filter(models.Post.food_id == food_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
+
     user = db.query(models.User).filter(models.User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
 
     # 目標每個 item 的新數量
     target_new_amounts: dict[int, int] = {}
     for entry in modify_in.items:
         target_new_amounts[entry.item_id] = entry.new_amount
+
 
     # 抓取相關 reservations 與 items
     target_item_ids = list(target_new_amounts.keys())
@@ -131,11 +137,13 @@ def modify_reservations_bulk(food_id: int, user_id: int, modify_in: schemas.Rese
     ).all()
     reservation_map = {r.item_id: r for r in reservations}
 
+
     items = db.query(models.Item).filter(
         models.Item.food_id == food_id,
         models.Item.id.in_(target_item_ids)
     ).all()
     item_map = {i.id: i for i in items}
+
 
     # 驗證每個 item 都存在且有對應預約
     for item_id in target_item_ids:
@@ -144,36 +152,77 @@ def modify_reservations_bulk(food_id: int, user_id: int, modify_in: schemas.Rese
         if item_id not in reservation_map:
             raise HTTPException(status_code=404, detail=f"Reservation for item {item_id} not found")
 
-    # 先驗證所有新數量是否可行
-    for item_id, new_number_book in target_new_amounts.items():
-        if new_number_book < 1:
-            raise HTTPException(status_code=400, detail="Resulting reservation quantity must be at least 1")
-        res = reservation_map[item_id]
-        item = item_map[item_id]
-        delta = new_number_book - res.number_book
-        if delta > 0 and item.number_online < delta:
-            raise HTTPException(status_code=400, detail=f"Not enough items available online for item {item_id}")
 
-    # 通過驗證後再一次性更新庫存與預約數
-    updated_reservations: list[models.Reservation] = []
+    # 構建每項目的驗證結果
+    results: list[schemas.ReservationModifyStatus] = []
+    validations: dict[int, tuple[bool, str | None]] = {}
+
+
+    # 若所有品項皆被設定為 0，則以狀態方式回報錯誤，不進行更新
+    if len(target_new_amounts) > 0 and all(v == 0 for v in target_new_amounts.values()):
+        for item_id, new_number_book in target_new_amounts.items():
+            res = reservation_map[item_id]
+            results.append(
+                schemas.ReservationModifyStatus(
+                    item_id=item_id,
+                    is_valid=False,
+                    error_type="預約數量不可為0",
+                    current_number_book=res.number_book,
+                    requested_number_book=new_number_book,
+                )
+            )
+        return results
     for item_id, new_number_book in target_new_amounts.items():
         res = reservation_map[item_id]
         item = item_map[item_id]
         delta = new_number_book - res.number_book
+
+
+        # 允許單筆改為 0，不允許負數
+        if new_number_book < 0:
+            validations[item_id] = (False, "LESS_THAN_MIN")
+        elif delta > 0 and item.number_online < delta:
+            validations[item_id] = (False, "預約數量超過剩食數量")
+        else:
+            validations[item_id] = (True, None)
+        results.append(
+            schemas.ReservationModifyStatus(
+                item_id=item_id,
+                is_valid=validations[item_id][0],
+                error_type=validations[item_id][1],
+                current_number_book=res.number_book,
+                requested_number_book=new_number_book,
+            )
+        )
+
+
+    # 若任一驗證失敗，則全部不更新
+    if any(not ok for ok, _ in validations.values()):
+        return results
+
+
+    # 全部通過驗證後再一次性更新庫存與預約數
+    for item_id, new_number_book in target_new_amounts.items():
+        res = reservation_map[item_id]
+        item = item_map[item_id]
+        delta = new_number_book - res.number_book
+
 
         if delta > 0:
             item.number_online -= delta
         elif delta < 0:
             item.number_online += (-delta)
 
+
         res.number_book = new_number_book
-        updated_reservations.append(res)
+
 
     db.commit()
-    for r in updated_reservations:
-        db.refresh(r)
+    # no need to refresh for status-only response
 
-    return updated_reservations
+
+    return results
+
 
 # -------------------------
 # 2-1-3: 查看預約列表
