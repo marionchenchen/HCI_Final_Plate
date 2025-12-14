@@ -1,6 +1,6 @@
 // api.js
 
-const BASE_URL = 'http://172.18.14.66:8000'; 
+export const BASE_URL = 'http://172.18.11.173:8000'; 
 
 // 假設類型
 interface ItemPayload {
@@ -223,6 +223,22 @@ export const createReservation = async (reservationData) => {
         throw error;
     }
 };
+
+// here 
+// 取得特定使用者對某個 food 的 warning 次數
+export async function fetchWarningTimes(userId, foodId) {
+    const response = await fetch(`${BASE_URL}/pickup/food/${foodId}/user/${userId}`);
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch warning times');
+    }
+
+    const warning = await response.json();
+    console.log("Warning data from API:", warning);
+
+    // 保險寫法，避免 undefined
+    return warning?.warning_times ?? 0;
+}
 
 
 

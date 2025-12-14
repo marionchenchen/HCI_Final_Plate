@@ -216,3 +216,14 @@ class PickupFail(BaseModel):
     user_id: Optional [int] = None
     food_id: int
 
+
+# ---------- Warning ----------
+class Warning(BaseModel):
+    user_id: Optional[int] = None
+    food_id: int
+    warning_times: int
+
+
+    model_config = {"from_attributes": True}
+
+

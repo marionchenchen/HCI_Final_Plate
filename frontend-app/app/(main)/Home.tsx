@@ -30,6 +30,8 @@ const MAX_SHEET_HEIGHT = 400;
 
 const FILTER_TAGS = ['中式', '日式', '西式', '甜點', '素食', '飲料', '熱食', '冷藏'];
 
+const CircleColors = [ "#76AE2C", "#D8B850", "#4B55BC", "#8E8F8E"]
+
 const locationOptions = {
     accuracy: Location.Accuracy.Balanced,
     // 您也可以加入 timeout 屬性來設定超時時間
@@ -250,7 +252,15 @@ export default function Home() {
                 {/* 渲染所有 posts 的圈圈 */}
                 {posts.map((post) => {
                     const isTracksView = tracksViewMap[post.food_id] ?? true; 
-
+                    const isTrack = post.food_items?.every(item=>item.quantity === 0);
+                    let colorIndex = 0;
+                    const isReserve = userFoodId === post.food_id;
+                    console.log("isReserve" + post.food_id + isReserve);
+                    if (post.user_id === userId) colorIndex = 1;
+                    else if (post.food_id === userFoodId) colorIndex = 2;
+                    else if (isTrack) colorIndex = 3;
+                    
+                    
                     return (
                         <Marker
                         key={post.food_id} 
@@ -267,7 +277,7 @@ export default function Home() {
                             height: 35,
                             borderRadius: 20,
                             borderWidth: 2,
-                            borderColor: post.color,
+                            borderColor: CircleColors[colorIndex],
                             backgroundColor: 'white',
                             justifyContent: 'center',
                             alignItems: 'center',

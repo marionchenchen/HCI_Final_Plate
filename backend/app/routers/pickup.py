@@ -134,3 +134,24 @@ def get_comments(food_id: int, db: Session = Depends(get_db)):
         }
         for c in comments
     ]
+
+
+@router.get("/food/{food_id}/user/{user_id}", response_model=schemas.Warning)
+def check_warning(food_id: int, user_id: int, db: Session = Depends(get_db)):
+    """
+    Check warning times for a given user_id and food_id.
+    Returns a Warning object; if none exists, returns a zeroed warning entry.
+    """
+    warning = db.query(models.Warning).filter_by(user_id=user_id, food_id=food_id).first()
+
+
+    if not warning:
+        return schemas.Warning(user_id=user_id, food_id=food_id, warning_times=0)
+
+
+    return schemas.Warning(
+       
+        user_id=getattr(warning, "user_id", None),
+        food_id=getattr(warning, "food_id", None),
+        warning_times=getattr(warning, "warning_times", 0),
+    )
