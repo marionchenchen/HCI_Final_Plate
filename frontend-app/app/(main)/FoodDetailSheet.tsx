@@ -6,7 +6,10 @@ import {
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Share, ImageSourcePropType } from 'react-native';
-import { fetchReservationsByFood, fetchReserveInfoByUser, BASE_URL, fetchWarningTimes } from "../../api";
+import { usePostRefresh } from "../../context/PostRefreshContext";
+import { fetchReservationsByFood, fetchReserveInfoByUser, BASE_URL, fetchWarningTimes,
+    pickupSuccess
+} from "../../api";
 import * as Location from 'expo-location'; // here
 import * as FileSystem from 'expo-file-system'; // here2
 
@@ -61,6 +64,7 @@ interface FoodDetailSheetProps {
 interface ProviderFoodStatusProps {
     location: PostData;
     reservations: ReservationGroup[];
+    handleClose: () => void;
 }
 
 // 原始 API 回傳的單筆預約介面 (用於從 API 數據轉換)
@@ -169,7 +173,7 @@ const RESERVED_FOOD_ID = 2;
 
 // --- 共享函式 ---
 
-const handleShare = async (location: LocationData) => {
+const handleShare = async (location: PostData) => {
     try {
         await Share.share({
             message: `${location.address}\n剩食: ${(location.foods ?? []).map(f => f.item).join(', ')}`,
@@ -188,15 +192,99 @@ const formatTime = (totalSeconds: number) => {
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
+// 輔助函式：根據您提供的單一用戶邏輯，計算初始剩餘秒數
+const calculateInitialTimeLeft = (
+    reserveAtTimestamp: string, 
+    timeRestrictionMinutes: number
+): number => {
+    // 1. 處理時間戳記 (加上 'Z' 確保它被視為 UTC 時間)
+    const reserveDate = new Date(reserveAtTimestamp + 'Z'); 
+    const now = new Date();
+
+    // 2. 計算已經流逝的秒數 (passedSeconds)
+    const passedSeconds = Math.max(
+        Math.floor((now.getTime() - reserveDate.getTime()) / 1000),
+        0
+    );
+
+    // 3. 計算總保留秒數 (limitSeconds)
+    const limitSeconds = timeRestrictionMinutes * 60;
+    
+    // 4. 計算剩餘秒數 (remainingSeconds)
+    const remainingSeconds =
+        passedSeconds >= limitSeconds
+            ? 0
+            : limitSeconds - passedSeconds;
+
+    return remainingSeconds;
+};
+
 const ProviderFoodStatusView = ({ 
     location, 
     reservations, 
+    handleClose
 }: ProviderFoodStatusProps) => {
     const currentIcon = getVerificationIcon(location.verification_icon);
-    console.log('Verification Icon ID:', location.verification_icon);
+    
     const [localReservations, setLocalReservations] = useState(reservations);
+    const { triggerRefresh } = usePostRefresh();
 
-    const handleCollect = (userId: number) => { 
+    // 計算剩餘秒數
+    useEffect(() => {
+        const timeRestriction = location.time_restriction; // 獲取保留時間 (分鐘)
+        const processedReservations = reservations.map(userGroup => {
+            const reserveAt = userGroup.reserve_at; 
+
+            if (!reserveAt || timeRestriction === undefined) {
+                 return userGroup;
+            }
+            
+            // 計算剩餘秒數 (每個預約都獨立計算)
+            const initialTimeLeftSeconds = calculateInitialTimeLeft(
+                reserveAt, 
+                timeRestriction
+            );
+            
+            return {
+                ...userGroup,
+                time_left_seconds: initialTimeLeftSeconds,
+            };
+        });
+        setLocalReservations(processedReservations);
+    }, [reservations, location.time_restriction]); // 確保數據和時間限制變動時重算
+
+    // 倒數計時器 (每秒遞減)
+    useEffect(() => {
+        if (localReservations.length === 0) return;
+
+        const timer = setInterval(() => {
+            setLocalReservations(prevReservations => {
+                
+                // 更新每個項目的時間
+                const newReservations = prevReservations.map(userGroup => {
+                    
+                    if (userGroup.is_collected || userGroup.time_left_seconds <= 0) {
+                        return userGroup;
+                    }
+
+                    const newTimeLeft = userGroup.time_left_seconds - 1;
+
+                    return {
+                        ...userGroup,
+                        time_left_seconds: newTimeLeft,
+                    };
+                });
+                
+                return newReservations;
+            });
+        }, 1000); 
+
+        return () => clearInterval(timer);
+        
+    }, [localReservations.length]); // 列表長度，確保列表載入/清空時正確啟動/停止定時器
+
+    // 打勾
+    const handleCollect = (userId: number, foodId: number) => { 
         Alert.alert(
             "確認領取", 
             "確定這位使用者預約的所有食物都已經領取了嗎？",
@@ -204,25 +292,51 @@ const ProviderFoodStatusView = ({
                 { text: "取消", style: "cancel" },
                 { 
                     text: "確認", 
-                    onPress: () => {
-                        // TODO: 呼叫 API 通知後端此使用者群組已完成領取 (使用 userId)
-                        
-                        // 模擬更新本地狀態
-                        setLocalReservations(prev => 
-                            prev.map(userGroup => 
-                                userGroup.user_id === userId 
-                                    ? { 
-                                        ...userGroup, 
-                                        is_collected: true, // 僅需更新群組的領取狀態
-                                    } 
-                                    : userGroup
-                            )
-                        );
-                        Alert.alert("領取成功", `使用者 ID ${userId} 的所有預約已完成領取。`);
+                    onPress: async () => { // ⭐️ 變成非同步函式 (async)
+                        try {
+                            // ⭐️ 呼叫 API 通知後端。Provider 不留言，所以 comment 留空。
+                            const result = await pickupSuccess(userId, foodId, ""); 
+
+                            // 成功後才更新本地狀態，視覺上標記為已領取
+                            setLocalReservations(prev => 
+                                prev.filter(userGroup => userGroup.user_id !== userId)
+                            );
+                            
+                            // 根據後端回傳的訊息給予使用者回饋
+                            if (result.message && result.message.includes("post removed")) {
+                                Alert.alert("領取成功", "恭喜！所有食物已清空，貼文已自動刪除。");
+                                // 這裡可能需要一個 callback 函式來通知父元件 (foodDetailSheet) 關閉或刷新，
+                                // 假設您有一個名為 onPostRemoved 的 prop:
+                                // onPostRemoved();
+                                handleClose();
+                                triggerRefresh();
+                            } else {
+                                Alert.alert("領取成功", `使用者 ID ${userId} 的預約已完成領取。`);
+                            }
+
+                        } catch (error) {
+                            const errorMessage = error instanceof Error ? error.message : "未知錯誤";
+                            Alert.alert("領取操作失敗", errorMessage);
+                        }
                     }
                 }
             ]
         );
+    };
+
+    const router = useRouter();
+    
+    const handleEdit = () => {
+        if (location && location.food_id) {
+            router.push({
+                pathname: '/(main)/editpost',
+                params: { 
+                    id: location.food_id,
+                }
+            });
+        } else {
+            Alert.alert("錯誤", "無法找到食物 ID，無法編輯。");
+        }
     };
 
     const renderHeaderContent = () => (
@@ -232,12 +346,13 @@ const ProviderFoodStatusView = ({
                 <View style={styles.addressContainer}>
                     <Text style={styles.verificationIconText}>
                         {currentIcon}
+                        <Text style={listStyles.emptyText}>請於前來領取者頁面點選此符號</Text>
                     </Text>
                 </View>
 
                 {/* 編輯按鈕 (保持在右側) */}
                 <TouchableOpacity 
-                    onPress={() => Alert.alert("待實作", "導向編輯貼文頁面")}
+                    onPress={handleEdit}
                     style={styles.editButton}
                 >
                     <Ionicons name="create-outline" size={24} color="#333" />
@@ -260,11 +375,9 @@ const ProviderFoodStatusView = ({
 
     return (
         <FlatList
-            // 🚨 FlatList 現在使用 reservations 數據
-            data={reservations}
+            data={localReservations}
             keyExtractor={item => item.user_id.toString()}
             
-            // 🚨 將所有靜態內容放入 ListHeaderComponent
             ListHeaderComponent={
                 <>
                     {renderHeaderContent()}
@@ -278,7 +391,6 @@ const ProviderFoodStatusView = ({
             }
             
             renderItem={({ item: userGroup }) => {
-                 // 🚨 將多個品項組合成單一文字行
                 const itemDetails = userGroup.reserved_items
                     .map(item => `${item.item_name} (${item.number_book} 份)`)
                     .join(', ');
@@ -311,7 +423,7 @@ const ProviderFoodStatusView = ({
                         {/* 打勾按鈕 (單一按鈕) */}
                         <TouchableOpacity 
                             style={listStyles.collectButton}
-                            onPress={() => handleCollect(userGroup.user_id)}
+                            onPress={() => handleCollect(userGroup.user_id, location.food_id)}
                             disabled={userGroup.is_collected}
                         >
                             <MaterialIcons 
@@ -693,7 +805,6 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
     const isReserved = IsReserved;
     console.log(isReserved);
 
-
     // 狀態：延遲加載預約列表
     const [reservations, setReservations] = useState<ReservationGroup[]>([]);
     const [isLoadingReservations, setIsLoadingReservations] = useState(false);
@@ -705,8 +816,6 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
     const [userLocation, setUserLocation] = useState<{latitude: number;longitude: number;} | null>(null);
     const [locationError, setLocationError] = useState<string | null>(null);    
     const [warningTimes, setWarningTimes] = useState<number>(0);
-    
-
     
     useEffect(() => {
         const fetchAndCalculateTime = async () => {
@@ -761,41 +870,35 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
                 // 🚨 rawReservations 預期是 { user_id: number, reservations: ReservationUserItem[] } 的陣列
                 .then((rawReservations: { user_id: number, reservations: ReservationUserItem[] }[]) => { 
                     
-                    const timeLimitMinutes = Number(location.time_restriction) || 15;
-                    const timeLimitMs = timeLimitMinutes * 60 * 1000;
-                    
                     const mappedReservations: ReservationGroup[] = rawReservations.map((userGroup) => {
-                        
-                        // 假設所有品項的 reserve_at 都相同，我們只取第一個品項的時間來計算
-                        const firstReservation = userGroup.reservations[0];
-                        let timeLeftSeconds = 0;
-
-                        if (firstReservation) {
-                            const reserveTime = new Date(firstReservation.reserve_at).getTime();
-                            const timeElapsedMs = Date.now() - reserveTime;
-                            timeLeftSeconds = Math.max(0, Math.floor((timeLimitMs - timeElapsedMs) / 1000));
-                        }
-                        
-                        // 1. 處理並提取該使用者群組內的所有品項資訊
-                        const reservedItems: GroupedReservedItem[] = userGroup.reservations.map((resItem) => {
-                            return {
-                                reservation_id: resItem.reservation_id,
-                                item_name: resItem.item_name,
-                                number_book: resItem.number_book,
-                            };
-                        });
-                        
-                        // 2. 返回合併後的使用者群組
+                    const firstReservation = userGroup.reservations[0];
+                    
+                    // 1. 儲存原始的時間戳記字串
+                    const reserveAtString = firstReservation ? firstReservation.reserve_at : '';
+                    
+                    // 2. 處理並提取該使用者群組內的所有品項資訊 (不變)
+                    const reservedItems: GroupedReservedItem[] = userGroup.reservations.map((resItem) => {
                         return {
-                            user_id: userGroup.user_id,
-                            reserved_items: reservedItems,
-                            time_left_seconds: timeLeftSeconds,
-                            is_collected: false, // 預設未領取
+                            reservation_id: resItem.reservation_id,
+                            item_name: resItem.item_name,
+                            number_book: resItem.number_book,
                         };
                     });
                     
-                    // 🚨 狀態更新為新的 ReservationGroup[] 類型
-                    setReservations(mappedReservations);
+                    // 3. 返回合併後的使用者群組
+                    return {
+                        user_id: userGroup.user_id,
+                        reserved_items: reservedItems,
+                        
+                        reserve_at: reserveAtString, 
+                        
+                        time_left_seconds: 0, 
+                        
+                        is_collected: false, // 預設未領取
+                    };
+                });
+                
+                setReservations(mappedReservations);
                 })
                 .catch(err => {
                     console.error("Failed to load reservations:", err);
@@ -886,6 +989,7 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
                 <ProviderFoodStatusView
                     location={location}
                     reservations={reservations}
+                    handleClose={handleClose}
                 />
             ) : (
                 // 渲染 Receiver 介面

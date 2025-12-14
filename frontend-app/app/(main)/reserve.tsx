@@ -8,7 +8,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ImageSourcePropType } from 'react-native';
 import { useUser } from '../../context/UserContext';
-import { createReservation, getPostById, BASE_URL } from '../../api';
+import { createReservation, getPostById } from '../../api';
+import { usePostRefresh } from "../../context/PostRefreshContext";
 
 const { width } = Dimensions.get('window');
 
@@ -48,6 +49,8 @@ export default function ReserveQuantityScreen() {
     const [reserveQuantities, setReserveQuantities] = useState<{ [key: number]: number | '' }>({}); 
     const [postData, setPostData] = useState<PostData | null>(null); // 貼文所有資料
     const [loading, setLoading] = useState(true);
+
+    const { triggerRefresh } = usePostRefresh();
 
     // 3. 使用 food_id 載入貼文資料
     useEffect(() => {
@@ -209,9 +212,10 @@ export default function ReserveQuantityScreen() {
             // 🚀 步驟 3: 只呼叫一次 API
             const newReservations = await createReservation(reservationPayload);
 
+            triggerRefresh();
             Alert.alert('預約成功', `已成功預約 ${newReservations.length} 個品項！`);
             // TODO: 如果有 PostRefreshContext，請在這裡呼叫 triggerRefresh()
-            router.back(); 
+            router.navigate('/(main)/Home');
         } catch (error) {
             console.error('Reservation failed:', error);
             Alert.alert('預約失敗', error.message || '連線錯誤或後端處理失敗，請稍後再試。');

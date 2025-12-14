@@ -1,33 +1,9 @@
 // api.js
 
-export const BASE_URL = 'http://172.18.11.173:8000'; 
-
-// 假設類型
-interface ItemPayload {
-    item: string;
-    number_online: number;
-    number_onsite: number;
-}
-
-interface PicturePayload {
-    picture: string; // Base64 String
-}
-
-interface PostCreatePayload {
-    // user_id: number;
-    address: string;
-    tag: string;
-    note: string;
-    gps_latitude: number;
-    gps_longitude: number;
-    time_restriction: number;
-    distance_restriction: number;
-    items: ItemPayload[];
-    pictures: PicturePayload[];
-}
+const BASE_URL = 'http://172.18.11.163:8000'; 
 
 // 發布貼文
-export async function publishFoodPost(payload: PostCreatePayload) {
+export async function publishFoodPost(payload) {
     const response = await fetch(`${BASE_URL}/posts/`, {
         method: 'POST',
         headers: {
@@ -197,16 +173,12 @@ export const createReservation = async (reservationData) => {
         });
 
         if (!response.ok) {
-            // 🚨 修正點：嘗試讀取錯誤細節，如果失敗，則提供更通用的訊息
             const errorData = await response.json().catch(() => ({ detail: '無法解析後端錯誤訊息' }));
 
             let errorMessage = '預約失敗，請檢查輸入數量。';
 
-            // 檢查 FastAPI 預設的錯誤格式或我們期望的 detail
             if (errorData.detail) {
-                // 如果 detail 是一個陣列 (例如 Pydantic 驗證錯誤)，則將其轉換為字串
                 if (Array.isArray(errorData.detail)) {
-                    // 🚨 這是最常見的 FastAPI 驗證錯誤格式，需要取出 msg
                     errorMessage = errorData.detail.map(err => err.msg || JSON.stringify(err)).join('; ');
                 } else if (typeof errorData.detail === 'string') {
                     errorMessage = errorData.detail;
@@ -225,8 +197,31 @@ export const createReservation = async (reservationData) => {
     }
 };
 
-// here 
-// 取得特定使用者對某個 food 的 warning 次數
+// 領取成功
+export async function pickupSuccess(userId, foodId, comment = "") {
+    try {
+        const response = await fetch(`${BASE_URL}/pickup/pickup/success`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userId,
+                food_id: foodId,
+                comment: comment, 
+            }),
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: '無法解析後端錯誤訊息' }));
+            const errorMessage = errorData.detail || errorData.message || `HTTP 錯誤 ${response.status}`;
+            throw new Error(`領取失敗: ${errorMessage}`);
+        }
+
+        return await response.json(); 
+    } catch (error) {
+        console.error('pickupSuccess Error:', error);
+        throw error;
+    }
+}
+
 export async function fetchWarningTimes(userId, foodId) {
     const response = await fetch(`${BASE_URL}/pickup/food/${foodId}/user/${userId}`);
 
@@ -240,7 +235,3 @@ export async function fetchWarningTimes(userId, foodId) {
     // 保險寫法，避免 undefined
     return warning?.warning_times ?? 0;
 }
-
-
-
-

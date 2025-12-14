@@ -28,16 +28,7 @@ const LATITUDE_DELTA = 0.01;
 const LONGITUDE_DELTA = LATITUDE_DELTA * (width / height);
 const MAX_SHEET_HEIGHT = 400;
 
-const FILTER_TAGS = ['中式', '日式', '西式', '甜點', '素食', '飲料', '熱食', '冷藏'];
-
 const CircleColors = [ "#76AE2C", "#D8B850", "#4B55BC", "#8E8F8E"]
-
-const locationOptions = {
-    accuracy: Location.Accuracy.Balanced,
-    // 您也可以加入 timeout 屬性來設定超時時間
-    // timeout: 10000, 
-};
-
 
 interface FoodItem {
     item_name: string;
@@ -55,7 +46,7 @@ interface PostData {
     distance_restriction: number;
     created_at: string;
     updated_at: number; // * 
-    verification_icon: ImageSourcePropType; // **
+    verification_icon: number; // **
     gps_latitude: number;
     gps_longitude: number;
     
@@ -81,7 +72,7 @@ export default function Home() {
 
     const router = useRouter();
     const { userId, loading } = useUser();
-    console.log("目前這台裝置的 user_id =", userId);
+    // console.log("目前這台裝置的 user_id =", userId);
     const { refreshKey } = usePostRefresh();
 
     const [posts, setPosts] = useState<PostData[]>([]); 
@@ -170,6 +161,7 @@ export default function Home() {
 
         loadUserFood();
     }, [userId]);
+    
 
     // const reservations = await fetchReservationsByUserAndFood(1, 2);
     // console.log(reservations);
@@ -216,10 +208,10 @@ export default function Home() {
 
     // --- Render ---
 
-    // 處理載入和錯誤狀態 (TODO: 樣式還沒寫)
+    // 處理載入和錯誤狀態
     if (isLoading) {
         return (
-            <View style={styles.loadingContainer}>
+            <View>
                 <Text>正在加載貼文...</Text>
             </View>
         );
@@ -227,9 +219,8 @@ export default function Home() {
 
     if (error) {
         return (
-            <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>錯誤: {error}</Text>
-                {/* 可以添加一個重試按鈕 */}
+            <View>
+                <Text>錯誤: {error}</Text>
             </View>
         );
     }
@@ -241,12 +232,12 @@ export default function Home() {
                 showsUserLocation
                 onPress={handleMapPress}
                 initialRegion={
-                userRegion ?? {
-                    latitude: 24.787,
-                    longitude: 121.005,
-                    latitudeDelta: LATITUDE_DELTA,
-                    longitudeDelta: LONGITUDE_DELTA,
-                }
+                    userRegion ?? {
+                        latitude: 24.787,
+                        longitude: 121.005,
+                        latitudeDelta: LATITUDE_DELTA,
+                        longitudeDelta: LONGITUDE_DELTA,
+                    }
                 }
             >
                 {/* 渲染所有 posts 的圈圈 */}
@@ -302,14 +293,6 @@ export default function Home() {
                 )}
             </MapView>
 
-			{/* 偏好設定按鈕 */}
-            <TouchableOpacity 
-                style={styles.settingsButton}
-                onPress={() => router.push('/(main)/NotificationPreference')} 
-            >
-                <Ionicons name="settings" size={26} color="#333" />
-            </TouchableOpacity>
-
             {/* 把 selectedPost 傳到 FoodDetailSheet */}
             {selectedPost && (
                 <Animated.View 
@@ -326,13 +309,15 @@ export default function Home() {
                 </Animated.View>
             )}
 
-            <View style={styles.bottomBar}>
-                <TouchableOpacity 
-                style={styles.addButton}
-                onPress={() => router.push('/(main)/newpost')}>
-                <Text style={styles.addButtonText}>+</Text>
-                </TouchableOpacity>
-            </View>
+            {!selectedPost && ( // ⭐️ 關鍵：只有在 selectedPost 為 null 時才顯示按鈕
+                <View style={styles.bottomBar}>
+                    <TouchableOpacity
+                        style={styles.addButton}
+                        onPress={() => router.push('/(main)/newpost')}>
+                        <Text style={styles.addButtonText}>+</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
         </View>
     );
 }
@@ -344,20 +329,6 @@ const styles = StyleSheet.create({
     map: {
         width: width,
         height: height,
-    },
-    settingsButton: { 
-        position: 'absolute',
-        top: 30,
-        right: 20,
-        zIndex: 10,
-        backgroundColor: 'white',
-        borderRadius: 20,
-        padding: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.2,
-        shadowRadius: 1.41,
-        elevation: 2,
     },
     bottomSheet: {
         position: 'absolute',
@@ -376,9 +347,10 @@ const styles = StyleSheet.create({
     },
     bottomBar: {
         position: 'absolute',
-        bottom: 20,
-        right: 20,
-        alignItems: 'flex-end',
+        bottom: 30,
+        left: 0, 
+        right: 0,
+        alignItems: 'center',
     },
     addButton: {
         backgroundColor: '#576238',
