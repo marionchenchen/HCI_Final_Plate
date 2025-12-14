@@ -12,12 +12,6 @@ import { useUser } from "../../context/UserContext"
 import { usePostRefresh } from "../../context/PostRefreshContext";
 
 const { width } = Dimensions.get('window');
-const selectedTag = "中式";
-
-interface FoodItemState {
-    item_name: string;
-    quantity: string;
-}
 
 const baseInputStyle = {
     borderWidth: 1,
@@ -367,7 +361,7 @@ export default function EditPostScreen() {
             triggerRefresh();
             
             Alert.alert("修改成功！");
-            router.back(); 
+            router.navigate('/(main)/Home');
         } catch (error: any) {
             console.error("Update Error:", error);
             Alert.alert("修改失敗", `詳情: ${error.message || '未知伺服器錯誤。'}`);
@@ -381,8 +375,8 @@ export default function EditPostScreen() {
 
     return (
         <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }} 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
         <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
 

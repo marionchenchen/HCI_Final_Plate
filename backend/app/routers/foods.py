@@ -53,3 +53,20 @@ def book_food(
     db.commit()
     db.refresh(food)
     return food
+
+@router.get("/food/{food_id}/user/{user_id}", response_model=list)
+def check_warning(food_id: int, user_id: int, db: Session = Depends(get_db)):
+    """
+    Check warning times for a given user_id and food_id.
+    Returns boolean indicating if user is allowed to reserve.
+    """
+    warning = db.query(models.Warning).filter_by(
+        user_id=user_id,
+        food_id=food_id
+    ).first()
+
+
+    if warning and warning.warning_times >= 2:
+        return {"allowed": False}
+    else:
+        return {"allowed": True}

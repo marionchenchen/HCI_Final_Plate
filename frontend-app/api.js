@@ -208,7 +208,6 @@ export async function pickupSuccess(userId, foodId, comment = "") {
                 comment: comment, 
             }),
         });
-
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ detail: '無法解析後端錯誤訊息' }));
             const errorMessage = errorData.detail || errorData.message || `HTTP 錯誤 ${response.status}`;
@@ -220,4 +219,18 @@ export async function pickupSuccess(userId, foodId, comment = "") {
         console.error('pickupSuccess Error:', error);
         throw error;
     }
+}
+
+export async function fetchWarningTimes(userId, foodId) {
+    const response = await fetch(`${BASE_URL}/pickup/food/${foodId}/user/${userId}`);
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch warning times');
+    }
+
+    const warning = await response.json();
+    console.log("Warning data from API:", warning);
+
+    // 保險寫法，避免 undefined
+    return warning?.warning_times ?? 0;
 }

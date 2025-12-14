@@ -16,14 +16,17 @@ router = APIRouter(
 def create_reservation(reservation_in: schemas.ReservationCreateMultiple, db: Session = Depends(get_db)):
     """預約剩食 - 加入資料庫，扣除線上顯示數量"""
 
+
     # Check if post exists
     post = db.query(models.Post).filter(models.Post.food_id == reservation_in.food_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
 
+
     # Group requested items by item_id and sum their quantities
     if not reservation_in.items or len(reservation_in.items) == 0:
         raise HTTPException(status_code=400, detail="No items provided for reservation")
+
 
     # Validate positive numbers and build sums
     item_quantities: dict[int, int] = {}
@@ -32,12 +35,15 @@ def create_reservation(reservation_in: schemas.ReservationCreateMultiple, db: Se
             raise HTTPException(status_code=400, detail=f"Invalid booking quantity for item {entry.item_id}")
         item_quantities[entry.item_id] = item_quantities.get(entry.item_id, 0) + entry.number_book
 
+
     # Fetch items in one query
     requested_item_ids = list(item_quantities.keys())
     items = db.query(models.Item).filter(models.Item.food_id == reservation_in.food_id, models.Item.id.in_(requested_item_ids)).all()
     items_map = {i.id: i for i in items}
 
-    
+
+   
+
 
     # Ensure all requested items exist and have enough quantity
     for item_id, qty in item_quantities.items():
@@ -46,6 +52,7 @@ def create_reservation(reservation_in: schemas.ReservationCreateMultiple, db: Se
             raise HTTPException(status_code=404, detail=f"Item {item_id} not found for this food")
         if item.number_online < qty:
             raise HTTPException(status_code=400, detail=f"Not enough items available online for item {item_id}")
+
 
     # All good, deduct and create reservation rows
     new_reservations: list[models.Reservation] = []
@@ -63,11 +70,30 @@ def create_reservation(reservation_in: schemas.ReservationCreateMultiple, db: Se
         db.add(res)
         new_reservations.append(res)
 
+
     db.commit()
     for r in new_reservations:
         db.refresh(r)
 
+
+    # Create or check warning entry for this user & food
+    warning = db.query(models.Warning).filter_by(
+        user_id=reservation_in.user_id,
+        food_id=reservation_in.food_id
+    ).first()
+   
+    if not warning:
+        warning = models.Warning(
+            user_id=reservation_in.user_id,
+            food_id=reservation_in.food_id,
+            warning_times=0
+        )
+        db.add(warning)
+        db.commit()
+
+
     return new_reservations
+
 
 # -------------------------
 # 2-1-2: 修改預約（多品項，依 food_id + user_id）
