@@ -53,7 +53,7 @@ interface PostData {
     distance_restriction: number;
     created_at: string;
     updated_at: number; // * 
-    verification_icon: ImageSourcePropType; // **
+    verification_icon: number; // **
     gps_latitude: number;
     gps_longitude: number;
     
@@ -79,7 +79,7 @@ export default function Home() {
 
     const router = useRouter();
     const { userId, loading } = useUser();
-    console.log("目前這台裝置的 user_id =", userId);
+    // console.log("目前這台裝置的 user_id =", userId);
     const { refreshKey } = usePostRefresh();
 
     const [posts, setPosts] = useState<PostData[]>([]); 
