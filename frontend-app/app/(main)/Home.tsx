@@ -15,20 +15,20 @@ import * as Location from "expo-location";
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-import FoodDetailSheet from './FoodDetailSheet'; 
+import FoodDetailSheet from './FoodDetailSheet';
 import { fetchPosts, fetchFoodIdByUser, fetchReservationsByUserAndFood } from "../../api";
 import { useUser } from "../../context/UserContext"
 import { usePostRefresh } from '../../context/PostRefreshContext';
 
-const LocalFoodImage = require('../../assets/pizza.jpg'); 
-const LocalTreeImage = require('../../assets/tree.png'); 
+const LocalFoodImage = require('../../assets/pizza.jpg');
+const LocalTreeImage = require('../../assets/tree.png');
 
 const { width, height } = Dimensions.get("window");
 const LATITUDE_DELTA = 0.01;
 const LONGITUDE_DELTA = LATITUDE_DELTA * (width / height);
 const MAX_SHEET_HEIGHT = 400;
 
-const CircleColors = [ "#76AE2C", "#D8B850", "#4B55BC", "#8E8F8E"]
+const CircleColors = ["#76AE2C", "#D8B850", "#4B55BC", "#8E8F8E"]
 
 interface FoodItem {
     item_name: string;
@@ -49,11 +49,11 @@ interface PostData {
     verification_icon: number; // **
     gps_latitude: number;
     gps_longitude: number;
-    
+
     food_items: FoodItem[]; // * 
     image: ImageSourcePropType; // * 
-    
-    color: `#${string}`; 
+
+    color: `#${string}`;
 }
 
 interface FrontendReservationItem {
@@ -75,7 +75,7 @@ export default function Home() {
     // console.log("目前這台裝置的 user_id =", userId);
     const { refreshKey } = usePostRefresh();
 
-    const [posts, setPosts] = useState<PostData[]>([]); 
+    const [posts, setPosts] = useState<PostData[]>([]);
     const [userFoodId, setUserFoodId] = useState<number | null>(null);
     const [isLoading, setIsLoading] = useState(true); // 新增載入狀態
     const [error, setError] = useState<string | null>(null); // 新增錯誤狀態
@@ -87,21 +87,21 @@ export default function Home() {
 
     const [reservationMarkers, setReservationMarkers] = useState<FrontendReservationItem[]>([]);
 
-	// 獲取定位資訊
+    // 獲取定位資訊
     useEffect(() => {
         (async () => {
-        let { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-            Alert.alert("Permission denied", "Cannot access location");
-            return;
-        }
-        let location = await Location.getCurrentPositionAsync({});
-        setUserRegion({
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            latitudeDelta: LATITUDE_DELTA,
-            longitudeDelta: LONGITUDE_DELTA,
-        });
+            let { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== "granted") {
+                Alert.alert("Permission denied", "Cannot access location");
+                return;
+            }
+            let location = await Location.getCurrentPositionAsync({});
+            setUserRegion({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                latitudeDelta: LATITUDE_DELTA,
+                longitudeDelta: LONGITUDE_DELTA,
+            });
         })();
     }, []);
 
@@ -111,25 +111,25 @@ export default function Home() {
             try {
                 setIsLoading(true);
                 setError(null);
-                
-                const apiPosts = await fetchPosts(); 
-                
+
+                const apiPosts = await fetchPosts();
+
                 // 資料格式轉換
                 // 後端返回的 Post 結構可能缺少 color 和 image 欄位 <- 這啥意思 (但感覺暫時沒問題，先不要管)
                 const transformedPosts: PostData[] = apiPosts.map(post => {
                     const apiPost = post as any;
-                    
+
                     const transformedFoodItems = (apiPost.items || []).map(item => ({
-                        item_name: item.item, 
-                        quantity: item.number_online, 
+                        item_name: item.item,
+                        quantity: item.number_online,
                     }));
-                    
+
                     return {
                         ...apiPost,
-                        food_items: transformedFoodItems, 
-                        image: apiPost.pictures && apiPost.pictures.length > 0 
-                            ? { uri: `data:image/jpeg;base64,${apiPost.pictures[0].picture}` } 
-                            : LocalFoodImage, 
+                        food_items: transformedFoodItems,
+                        image: apiPost.pictures && apiPost.pictures.length > 0
+                            ? { uri: `data:image/jpeg;base64,${apiPost.pictures[0].picture}` }
+                            : LocalFoodImage,
                     };
                 });
                 setPosts(transformedPosts);
@@ -143,7 +143,7 @@ export default function Home() {
         }
 
         loadPosts();
-    }, [refreshKey]); 
+    }, [refreshKey]);
 
     // 獲取所有預約剩食(呼叫 API)
     useEffect(() => {
@@ -161,7 +161,7 @@ export default function Home() {
 
         loadUserFood();
     }, [userId]);
-    
+
 
     // const reservations = await fetchReservationsByUserAndFood(1, 2);
     // console.log(reservations);
@@ -169,17 +169,17 @@ export default function Home() {
     const handleMarkerPress = (post: PostData) => {
         setSelectedPost(post);
         Animated.timing(slideAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: false,
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: false,
         }).start();
     };
 
     const handleClose = () => {
         Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: false,
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: false,
         }).start(() => setSelectedPost(null));
     };
 
@@ -194,7 +194,7 @@ export default function Home() {
 
     // 定義控制 Marker 顯示/隱藏的函式
     const handleToggleReservationMarkers = (
-        show: boolean, 
+        show: boolean,
         reservationData: FrontendReservationItem[]
     ) => {
         if (show) {
@@ -242,43 +242,43 @@ export default function Home() {
             >
                 {/* 渲染所有 posts 的圈圈 */}
                 {posts.map((post) => {
-                    const isTracksView = tracksViewMap[post.food_id] ?? true; 
-                    const isTrack = post.food_items?.every(item=>item.quantity === 0);
+                    const isTracksView = tracksViewMap[post.food_id] ?? true;
+                    const isTrack = post.food_items?.every(item => item.quantity === 0);
                     let colorIndex = 0;
                     const isReserve = userFoodId === post.food_id;
                     console.log("isReserve" + post.food_id + isReserve);
                     if (post.user_id === userId) colorIndex = 1;
                     else if (post.food_id === userFoodId) colorIndex = 2;
                     else if (isTrack) colorIndex = 3;
-                    
-                    
+
+
                     return (
                         <Marker
-                        key={post.food_id} 
-                        coordinate={{ latitude: post.gps_latitude, longitude: post.gps_longitude }}
-                        onPress={() => handleMarkerPress(post)}
-                        tracksViewChanges={isTracksView}
-                        onLayout={() =>
-                            setTimeout(() => setTracksViewMap(prev => ({ ...prev, [post.food_id]: false })), 300)
-                        }
+                            key={post.food_id}
+                            coordinate={{ latitude: post.gps_latitude, longitude: post.gps_longitude }}
+                            onPress={() => handleMarkerPress(post)}
+                            tracksViewChanges={isTracksView}
+                            onLayout={() =>
+                                setTimeout(() => setTracksViewMap(prev => ({ ...prev, [post.food_id]: false })), 300)
+                            }
                         >
-                        <View
-                            style={{
-                            width: 35,
-                            height: 35,
-                            borderRadius: 20,
-                            borderWidth: 2,
-                            borderColor: CircleColors[colorIndex],
-                            backgroundColor: 'white',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            }}
-                        >
-                            <Image
-                            source={post.image}
-                            style={{ width: 30, height: 30, borderRadius: 15 }}
-                            />
-                        </View>
+                            <View
+                                style={{
+                                    width: 35,
+                                    height: 35,
+                                    borderRadius: 20,
+                                    borderWidth: 2,
+                                    borderColor: CircleColors[colorIndex],
+                                    backgroundColor: 'white',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                }}
+                            >
+                                <Image
+                                    source={post.image}
+                                    style={{ width: 30, height: 30, borderRadius: 15 }}
+                                />
+                            </View>
                         </Marker>
                     );
                 })}
@@ -295,9 +295,9 @@ export default function Home() {
 
             {/* 把 selectedPost 傳到 FoodDetailSheet */}
             {selectedPost && (
-                <Animated.View 
+                <Animated.View
                     style={[styles.bottomSheet, { bottom: bottomPosition }]}
-                    pointerEvents="box-none" 
+                    pointerEvents="box-none"
                 >
                     <FoodDetailSheet
                         location={selectedPost}
@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
     bottomBar: {
         position: 'absolute',
         bottom: 30,
-        left: 0, 
+        left: 0,
         right: 0,
         alignItems: 'center',
     },

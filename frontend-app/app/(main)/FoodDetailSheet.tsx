@@ -1,17 +1,37 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { 
-    View, Text, StyleSheet, ScrollView, 
-    TouchableOpacity, Image, Alert, Dimensions, TextInput, FlatList 
+import React, { useRef, useState, useEffect, useMemo } from "react";
+import {
+    View, Text, StyleSheet, ScrollView,
+    TouchableOpacity, Image, Alert, Dimensions, TextInput, FlatList, Modal
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Share, ImageSourcePropType } from 'react-native';
 import { usePostRefresh } from "../../context/PostRefreshContext";
-import { fetchReservationsByFood, fetchReserveInfoByUser, BASE_URL, fetchWarningTimes,
+import {
+    fetchReservationsByFood, fetchReserveInfoByUser, BASE_URL, fetchWarningTimes,
     pickupSuccess
 } from "../../api";
 import * as Location from 'expo-location'; // here
 import * as FileSystem from 'expo-file-system'; // here2
+import { fetchUsersLocations } from "../../api";
+
+
+function distanceMeters(aLat: number, aLng: number, bLat: number, bLng: number) {
+    const R = 6371000; // meters
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(bLat - aLat);
+    const dLng = toRad(bLng - aLng);
+    const lat1 = toRad(aLat);
+    const lat2 = toRad(bLat);
+
+    const x =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+
+    return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+
 
 const PADDING_HORIZONTAL = 18;
 
@@ -47,15 +67,15 @@ interface PostData {
     verification_icon: number; // **
     gps_latitude: number;
     gps_longitude: number;
-    
+
     food_items: FoodItem[]; // * 
     image: ImageSourcePropType; // * 
-    
-    color: `#${string}`; 
+
+    color: `#${string}`;
 }
 
 interface FoodDetailSheetProps {
-    location: PostData; 
+    location: PostData;
     handleClose: () => void;
     myUserId: number;
     onToggleShowMarkers: (show: boolean, reservationData: ReservationGroup[]) => void;
@@ -68,12 +88,12 @@ interface ProviderFoodStatusProps {
 }
 
 // 原始 API 回傳的單筆預約介面 (用於從 API 數據轉換)
-interface ReservationUserItem { 
+interface ReservationUserItem {
     reservation_id: number;
     user_id: number;
     food_id: number;
     item_id: number;
-    item_name: string; 
+    item_name: string;
     gps_latitude: number;
     gps_longitude: number;
     number_book: number;
@@ -90,9 +110,9 @@ interface GroupedReservedItem {
 // 🌟 最終狀態使用的使用者群組介面 (簡化且優化)
 interface ReservationGroup {
     user_id: number;
-    time_left_seconds: number; 
-    reserved_items: GroupedReservedItem[]; 
-    is_collected: boolean; 
+    time_left_seconds: number;
+    reserved_items: GroupedReservedItem[];
+    is_collected: boolean;
 }
 
 // --- 共享函式 --- here2
@@ -140,24 +160,24 @@ interface ReservationGroup {
 // }
 
 async function sharePost({
-  address,
-  foodItems,
+    address,
+    foodItems,
 }: {
-  address: string;
-  foodItems: { item_name: string }[];
+    address: string;
+    foodItems: { item_name: string }[];
 }) {
-  try {
-    // 1. 組合分享文字
-    const itemsText = foodItems.map(f => f.item_name).join('、');
-    const message = `我在「${address}」發現了 ${itemsText}，快來一決剩 food！`;
+    try {
+        // 1. 組合分享文字
+        const itemsText = foodItems.map(f => f.item_name).join('、');
+        const message = `我在「${address}」發現了 ${itemsText}，快來一決剩 food！`;
 
-    // 2. 直接分享文字
-    await Share.share({
-      message,
-    });
-  } catch (err) {
-    Alert.alert('分享失敗', String(err));
-  }
+        // 2. 直接分享文字
+        await Share.share({
+            message,
+        });
+    } catch (err) {
+        Alert.alert('分享失敗', String(err));
+    }
 }
 
 
@@ -169,7 +189,7 @@ interface ReservationListProps {
 // --- 模擬狀態 (實務上應從 API 獲取) ---
 
 // 為了展示多種畫面，我們模擬一個已預約的 Food ID
-const RESERVED_FOOD_ID = 2; 
+const RESERVED_FOOD_ID = 2;
 
 // --- 共享函式 ---
 
@@ -194,11 +214,11 @@ const formatTime = (totalSeconds: number) => {
 
 // 輔助函式：根據您提供的單一用戶邏輯，計算初始剩餘秒數
 const calculateInitialTimeLeft = (
-    reserveAtTimestamp: string, 
+    reserveAtTimestamp: string,
     timeRestrictionMinutes: number
 ): number => {
     // 1. 處理時間戳記 (加上 'Z' 確保它被視為 UTC 時間)
-    const reserveDate = new Date(reserveAtTimestamp + 'Z'); 
+    const reserveDate = new Date(reserveAtTimestamp + 'Z');
     const now = new Date();
 
     // 2. 計算已經流逝的秒數 (passedSeconds)
@@ -209,7 +229,7 @@ const calculateInitialTimeLeft = (
 
     // 3. 計算總保留秒數 (limitSeconds)
     const limitSeconds = timeRestrictionMinutes * 60;
-    
+
     // 4. 計算剩餘秒數 (remainingSeconds)
     const remainingSeconds =
         passedSeconds >= limitSeconds
@@ -219,13 +239,13 @@ const calculateInitialTimeLeft = (
     return remainingSeconds;
 };
 
-const ProviderFoodStatusView = ({ 
-    location, 
-    reservations, 
+const ProviderFoodStatusView = ({
+    location,
+    reservations,
     handleClose
 }: ProviderFoodStatusProps) => {
     const currentIcon = getVerificationIcon(location.verification_icon);
-    
+
     const [localReservations, setLocalReservations] = useState(reservations);
     const { triggerRefresh } = usePostRefresh();
 
@@ -233,18 +253,18 @@ const ProviderFoodStatusView = ({
     useEffect(() => {
         const timeRestriction = location.time_restriction; // 獲取保留時間 (分鐘)
         const processedReservations = reservations.map(userGroup => {
-            const reserveAt = userGroup.reserve_at; 
+            const reserveAt = userGroup.reserve_at;
 
             if (!reserveAt || timeRestriction === undefined) {
-                 return userGroup;
+                return userGroup;
             }
-            
+
             // 計算剩餘秒數 (每個預約都獨立計算)
             const initialTimeLeftSeconds = calculateInitialTimeLeft(
-                reserveAt, 
+                reserveAt,
                 timeRestriction
             );
-            
+
             return {
                 ...userGroup,
                 time_left_seconds: initialTimeLeftSeconds,
@@ -259,10 +279,10 @@ const ProviderFoodStatusView = ({
 
         const timer = setInterval(() => {
             setLocalReservations(prevReservations => {
-                
+
                 // 更新每個項目的時間
                 const newReservations = prevReservations.map(userGroup => {
-                    
+
                     if (userGroup.is_collected || userGroup.time_left_seconds <= 0) {
                         return userGroup;
                     }
@@ -274,34 +294,34 @@ const ProviderFoodStatusView = ({
                         time_left_seconds: newTimeLeft,
                     };
                 });
-                
+
                 return newReservations;
             });
-        }, 1000); 
+        }, 1000);
 
         return () => clearInterval(timer);
-        
+
     }, [localReservations.length]); // 列表長度，確保列表載入/清空時正確啟動/停止定時器
 
     // 打勾
-    const handleCollect = (userId: number, foodId: number) => { 
+    const handleCollect = (userId: number, foodId: number) => {
         Alert.alert(
-            "確認領取", 
+            "確認領取",
             "確定這位使用者預約的所有食物都已經領取了嗎？",
             [
                 { text: "取消", style: "cancel" },
-                { 
-                    text: "確認", 
+                {
+                    text: "確認",
                     onPress: async () => { // ⭐️ 變成非同步函式 (async)
                         try {
                             // ⭐️ 呼叫 API 通知後端。Provider 不留言，所以 comment 留空。
-                            const result = await pickupSuccess(userId, foodId, ""); 
+                            const result = await pickupSuccess(userId, foodId, "");
 
                             // 成功後才更新本地狀態，視覺上標記為已領取
-                            setLocalReservations(prev => 
+                            setLocalReservations(prev =>
                                 prev.filter(userGroup => userGroup.user_id !== userId)
                             );
-                            
+
                             // 根據後端回傳的訊息給予使用者回饋
                             if (result.message && result.message.includes("post removed")) {
                                 Alert.alert("領取成功", "恭喜！所有食物已清空，貼文已自動刪除。");
@@ -325,12 +345,12 @@ const ProviderFoodStatusView = ({
     };
 
     const router = useRouter();
-    
+
     const handleEdit = () => {
         if (location && location.food_id) {
             router.push({
                 pathname: '/(main)/editpost',
-                params: { 
+                params: {
                     id: location.food_id,
                 }
             });
@@ -351,7 +371,7 @@ const ProviderFoodStatusView = ({
                 </View>
 
                 {/* 編輯按鈕 (保持在右側) */}
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={handleEdit}
                     style={styles.editButton}
                 >
@@ -377,7 +397,7 @@ const ProviderFoodStatusView = ({
         <FlatList
             data={localReservations}
             keyExtractor={item => item.user_id.toString()}
-            
+
             ListHeaderComponent={
                 <>
                     {renderHeaderContent()}
@@ -389,46 +409,46 @@ const ProviderFoodStatusView = ({
                     </View>
                 </>
             }
-            
+
             renderItem={({ item: userGroup }) => {
                 const itemDetails = userGroup.reserved_items
                     .map(item => `${item.item_name} (${item.number_book} 份)`)
                     .join(', ');
-                        
+
                 return (
-                    <View 
+                    <View
                         style={[listStyles.reservationRow, userGroup.is_collected && listStyles.collectedRow]}
                         key={userGroup.user_id}
                     >
-                        
+
                         {/* 號碼 (顯示使用者 ID) */}
                         <Text style={listStyles.cellNumber}>
                             {userGroup.user_id}
                         </Text>
-                        
+
                         {/* 使用者/品項 (顯示合併後的文字) */}
                         <View style={listStyles.cellUserContent}>
                             <Text style={listStyles.itemText}>
-                                {itemDetails} 
+                                {itemDetails}
                             </Text>
                         </View>
-                        
+
                         {/* 剩餘時間 (單一倒數) */}
                         <Text style={listStyles.cellTime}>
-                            {userGroup.is_collected 
-                                ? '已領取' 
+                            {userGroup.is_collected
+                                ? '已領取'
                                 : formatTime(userGroup.time_left_seconds)}
                         </Text>
-                        
+
                         {/* 打勾按鈕 (單一按鈕) */}
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={listStyles.collectButton}
                             onPress={() => handleCollect(userGroup.user_id, location.food_id)}
                             disabled={userGroup.is_collected}
                         >
-                            <MaterialIcons 
-                                name={userGroup.is_collected ? "check-circle" : "done"} 
-                                size={28} 
+                            <MaterialIcons
+                                name={userGroup.is_collected ? "check-circle" : "done"}
+                                size={28}
                                 color={userGroup.is_collected ? '#386641' : '#fff'}
                                 style={listStyles.collectedIcon}
                             />
@@ -436,7 +456,7 @@ const ProviderFoodStatusView = ({
                     </View>
                 );
             }}
-            
+
             ListEmptyComponent={() => <Text style={listStyles.emptyText}>目前沒有進行中的預約。</Text>}
         />
     );
@@ -444,15 +464,14 @@ const ProviderFoodStatusView = ({
 
 // --- Receiver 端顯示畫面 ---
 
-interface ReservedFoodViewProps 
-{
+interface ReservedFoodViewProps {
     location: PostData;
     defaultTime: number | null; // 或 number，如果你有預設值
     bookNum: number | null;
     user_id: number | null;
 }
 
-const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewProps ) => {
+const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewProps) => {
     const [status, setStatus] = useState<'reserved' | 'arrived' | 'finish'>('reserved');
     const [comment, setComment] = useState('');
     const [timeLeft, setTimeLeft] = useState(defaultTime);
@@ -461,7 +480,7 @@ const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewPr
             setTimeLeft(defaultTime);
         }
     }, [defaultTime]);
-    console.log("defaultTime"+defaultTime);
+    console.log("defaultTime" + defaultTime);
 
     const formatTime = (totalSeconds: number) => {
         const minutes = Math.floor(totalSeconds / 60);
@@ -492,14 +511,12 @@ const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewPr
     // 領取者完成領取 (提交評論)
     const handleFinish = (verificationId: number) => {
         // TODO: 呼叫 API 提交評論和完成狀態
-        if (verificationId === location.verification_icon)
-        {
+        if (verificationId === location.verification_icon) {
             Alert.alert('恭喜你已完成取餐');
             setStatus('finish');
         }
-        else
-        {
-             Alert.alert('驗證碼錯誤');
+        else {
+            Alert.alert('驗證碼錯誤');
         }
     }
 
@@ -515,8 +532,7 @@ const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewPr
 
 
 
-    async function pickupSuccess(userId, foodId, comments) 
-    {
+    async function pickupSuccess(userId, foodId, comments) {
         try {
             const response = await fetch(`${BASE_URL}/pickup/pickup/success`, {
                 method: 'POST',
@@ -536,8 +552,7 @@ const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewPr
         Alert.alert("謝謝您的評論，已完成本次預約")
     }
 
-    async function pickupFailed(userId, foodId) 
-    {
+    async function pickupFailed(userId, foodId) {
 
         try {
             const response = await fetch(`${BASE_URL}/pickup/pickup/fail`, {
@@ -558,95 +573,159 @@ const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewPr
     }
 
     const handleSave = async () => {
-    const payload = {
-        items: reservationItems.map(item => ({
-            item_id: item.item_id,
-            new_amount: Number(item.number_book),
-        })),
+        const payload = {
+            items: reservationItems.map(item => ({
+                item_id: item.item_id,
+                new_amount: Number(item.number_book),
+            })),
+        };
+
+        console.log('payload:', JSON.stringify(payload, null, 2));
+
+        try {
+            const response = await fetch(
+                `${BASE_URL}/reservations/food/${location.food_id}/user/${user_id}/modify`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }
+            );
+
+            if (!response.ok) throw new Error('Failed to update reservations');
+
+            const statusList: any[] = await response.json();
+
+            // 檢查是否有任一失敗
+            const anyInvalid = statusList.some(s => !s.is_valid);
+
+            if (anyInvalid) {
+                // 後端驗證失敗 → 文字框維持原數量
+                const firstError = statusList.find(s => !s.is_valid);
+                Alert.alert(
+                    "更新失敗",
+                    firstError?.error_type || "修改預約失敗"
+                );
+            } else {
+                // 全部成功才更新前端數量
+                // setReservationItems(
+                //     statusList.map(s => ({
+                //         item_id: s.item_id,
+                //         item_name: reservationItems.find(r => r.item_id === s.item_id)?.item_name || '',
+                //         number_book: s.requested_number_book, // 更新成新的數量
+                //     }))
+                // );
+
+                Alert.alert("成功", "已成功更改預約數量!");
+            }
+
+            setIsEditing(false);
+        } catch (error) {
+            console.error(error);
+            Alert.alert('更新失敗', error.message);
+        }
     };
 
-    console.log('payload:', JSON.stringify(payload, null, 2));
 
-    try {
-        const response = await fetch(
-            `${BASE_URL}/reservations/food/${location.food_id}/user/${user_id}/modify`,
-            {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
+    useEffect(() => {
+        // 只在狀態為 reserved 時抓資料
+        if (status === 'reserved') {
+            async function fetchFirstReservation() {
+                try {
+                    const response = await fetch(`${BASE_URL}/reservations/user/${user_id}`);
+                    if (!response.ok) throw new Error('Failed to fetch reservations');
+
+                    const data = await response.json();
+                    console.log('All reservations:', data);
+
+                    if (data.length > 0) {
+                        const firstFood = data[0];
+                        const items = firstFood.reservations.map(r => ({
+                            item_id: r.item_id,
+                            item_name: r.item_name,
+                            number_book: r.number_book
+                        }));
+
+                        setReservationItems(items); // 自動更新 state
+
+                        console.log('Item names and number booked:', items);
+                    }
+                } catch (error) {
+                    console.error(error);
+                }
             }
-        );
 
-        if (!response.ok) throw new Error('Failed to update reservations');
-
-        const statusList: any[] = await response.json();
-
-        // 檢查是否有任一失敗
-        const anyInvalid = statusList.some(s => !s.is_valid);
-
-        if (anyInvalid) {
-            // 後端驗證失敗 → 文字框維持原數量
-            const firstError = statusList.find(s => !s.is_valid);
-            Alert.alert(
-                "更新失敗",
-                firstError?.error_type || "修改預約失敗"
-            );
-        } else {
-            // 全部成功才更新前端數量
-            // setReservationItems(
-            //     statusList.map(s => ({
-            //         item_id: s.item_id,
-            //         item_name: reservationItems.find(r => r.item_id === s.item_id)?.item_name || '',
-            //         number_book: s.requested_number_book, // 更新成新的數量
-            //     }))
-            // );
-
-            Alert.alert("成功", "已成功更改預約數量!");
+            fetchFirstReservation(); // 立即呼叫
         }
+    }, [user_id, status]);
 
-        setIsEditing(false);
-    } catch (error) {
-        console.error(error);
-        Alert.alert('更新失敗', error.message);
-    }
-};
+    // 未移動檢查邏輯
+    const [showNoMoveModal, setShowNoMoveModal] = useState(false);
+    const hasCheckedRef = useRef(false);
+    useEffect(() => {
+        console.log("[NO_MOVE_CHECK] timeLeft =", timeLeft);
+        console.log("[NO_MOVE_CHECK] hasChecked =", hasCheckedRef);
 
+        if (timeLeft == null) return;
+        if (timeLeft > 540) return;
+        if (hasCheckedRef.current) return;
 
+        hasCheckedRef.current = true;
 
+        (async () => {
+            try {
+                // 1) 預約起點
+                const groups = await fetchReservationsByFood(location.food_id);
 
+                const myGroup = groups.find(g => g.user_id === user_id);
 
-  
-   useEffect(() => {
-    // 只在狀態為 reserved 時抓資料
-    if (status === 'reserved') {
-      async function fetchFirstReservation() {
-        try {
-          const response = await fetch(`${BASE_URL}/reservations/user/${user_id}`);
-          if (!response.ok) throw new Error('Failed to fetch reservations');
+                const myRes = myGroup?.reservations?.[0];
 
-          const data = await response.json();
-          console.log('All reservations:', data);
+                if (!myRes?.gps_latitude || !myRes?.gps_longitude) {
+                    console.warn("❌ no reservation gps");
+                    return;
+                }
 
-          if (data.length > 0) {
-            const firstFood = data[0];
-            const items = firstFood.reservations.map(r => ({
-              item_id: r.item_id,
-              item_name: r.item_name,
-              number_book: r.number_book
-            }));
+                // 2) 目前位置
+                const locs = await fetchUsersLocations([user_id]);
+                console.log("[NO_MOVE_CHECK] locs =", locs);
 
-            setReservationItems(items); // 自動更新 state
-            
-            console.log('Item names and number booked:', items);
-          }
-        } catch (error) {
-          console.error(error);
-        }
-      }
+                if (!Array.isArray(locs) || locs.length === 0) {
+                    console.warn("[NO_MOVE_CHECK] no location record");
+                    return;
+                }
 
-      fetchFirstReservation(); // 立即呼叫
-    }
-  }, [user_id, status]);
+                const me = locs[0];
+                if (
+                    me.gps_latitude == null ||
+                    me.gps_longitude == null
+                ) {
+                    console.warn("[NO_MOVE_CHECK] gps missing", me);
+                    return;
+                }
+
+                // 3) 算距離
+                const d = distanceMeters(
+                    myRes.gps_latitude,
+                    myRes.gps_longitude,
+                    me.gps_latitude,
+                    me.gps_longitude
+                );
+
+                console.log("[NO_MOVE_CHECK] distance (m) =", d);
+
+                if (d < 200) {
+                    console.log("⚠️ NO MOVE detected → show modal");
+                    setShowNoMoveModal(true);
+                } else {
+                    console.log("✅ user moved");
+                }
+            } catch (e) {
+                console.error("❌ NO_MOVE_CHECK failed", e);
+            }
+        })();
+    }, [timeLeft]);
+
 
     let content;
     if (status === 'reserved') {
@@ -737,11 +816,11 @@ const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewPr
                     <View style={styles.commentEmojis}>
                         {['Still hot', '好吃', 'fresh'].map(tag => (
                             <TouchableOpacity
-                            key={tag}
-                            style={styles.commentTag}
-                            onPress={() => setComment(tag)} // 點擊時設置 comment
+                                key={tag}
+                                style={styles.commentTag}
+                                onPress={() => setComment(tag)} // 點擊時設置 comment
                             >
-                            <Text style={styles.commentTagText}>{tag}</Text>
+                                <Text style={styles.commentTagText}>{tag}</Text>
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -767,8 +846,49 @@ const ReservedFoodView = ({ location, defaultTime, user_id }: ReservedFoodViewPr
             </>
         );
     }
+    // 未移動提示視窗
+    return (
+        <>
+            <View style={styles.reservedContentWrapper}>
+                {content}
+            </View>
 
-    return <View style={styles.reservedContentWrapper}>{content}</View>;
+            <Modal
+                visible={showNoMoveModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowNoMoveModal(false)}
+            >
+                <View style={styles.noMoveOverlay}>
+                    <View style={styles.noMoveCard}>
+                        <Text style={styles.noMoveTitle}>偵測到你</Text>
+                        <Text style={styles.noMoveTitle}>5 分鐘內</Text>
+                        <Text style={styles.noMoveTitle}>尚未移動</Text>
+
+                        <TouchableOpacity
+                            style={styles.keepButton}
+                            onPress={() => {
+                                setShowNoMoveModal(false);
+                                // TODO: 後端加「保留但記警告」API
+                            }}
+                        >
+                            <Text style={styles.keepButtonText}>保留預約</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.cancelReserveButton}
+                            onPress={() => {
+                                setShowNoMoveModal(false);
+                                pickupFailed(user_id, location.food_id);
+                            }}
+                        >
+                            <Text style={styles.cancelReserveButtonText}>取消預約</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+        </>
+    );
 }
 
 // here start
@@ -778,16 +898,16 @@ const getDistanceKm = (
     lon1: number,
     lat2: number,
     lon2: number
-    ) => {
-const toRad = (value: number) => (value * Math.PI) / 180;
-const R = 6371; // 地球半徑 km
+) => {
+    const toRad = (value: number) => (value * Math.PI) / 180;
+    const R = 6371; // 地球半徑 km
 
-const dLat = toRad(lat2 - lat1);
-const dLon = toRad(lon2 - lon1);
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
 
-const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-return R * c;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
 };
 //here end
 
@@ -813,10 +933,10 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
     const [numBook, setNumBook] = useState<number | null>(null);
 
     // GPS 狀態 here
-    const [userLocation, setUserLocation] = useState<{latitude: number;longitude: number;} | null>(null);
-    const [locationError, setLocationError] = useState<string | null>(null);    
+    const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number; } | null>(null);
+    const [locationError, setLocationError] = useState<string | null>(null);
     const [warningTimes, setWarningTimes] = useState<number>(0);
-    
+
     useEffect(() => {
         const fetchAndCalculateTime = async () => {
             if (!IsReserved || !myUserId) return;
@@ -868,37 +988,37 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
 
             fetchReservationsByFood(foodId)
                 // 🚨 rawReservations 預期是 { user_id: number, reservations: ReservationUserItem[] } 的陣列
-                .then((rawReservations: { user_id: number, reservations: ReservationUserItem[] }[]) => { 
-                    
+                .then((rawReservations: { user_id: number, reservations: ReservationUserItem[] }[]) => {
+
                     const mappedReservations: ReservationGroup[] = rawReservations.map((userGroup) => {
-                    const firstReservation = userGroup.reservations[0];
-                    
-                    // 1. 儲存原始的時間戳記字串
-                    const reserveAtString = firstReservation ? firstReservation.reserve_at : '';
-                    
-                    // 2. 處理並提取該使用者群組內的所有品項資訊 (不變)
-                    const reservedItems: GroupedReservedItem[] = userGroup.reservations.map((resItem) => {
+                        const firstReservation = userGroup.reservations[0];
+
+                        // 1. 儲存原始的時間戳記字串
+                        const reserveAtString = firstReservation ? firstReservation.reserve_at : '';
+
+                        // 2. 處理並提取該使用者群組內的所有品項資訊 (不變)
+                        const reservedItems: GroupedReservedItem[] = userGroup.reservations.map((resItem) => {
+                            return {
+                                reservation_id: resItem.reservation_id,
+                                item_name: resItem.item_name,
+                                number_book: resItem.number_book,
+                            };
+                        });
+
+                        // 3. 返回合併後的使用者群組
                         return {
-                            reservation_id: resItem.reservation_id,
-                            item_name: resItem.item_name,
-                            number_book: resItem.number_book,
+                            user_id: userGroup.user_id,
+                            reserved_items: reservedItems,
+
+                            reserve_at: reserveAtString,
+
+                            time_left_seconds: 0,
+
+                            is_collected: false, // 預設未領取
                         };
                     });
-                    
-                    // 3. 返回合併後的使用者群組
-                    return {
-                        user_id: userGroup.user_id,
-                        reserved_items: reservedItems,
-                        
-                        reserve_at: reserveAtString, 
-                        
-                        time_left_seconds: 0, 
-                        
-                        is_collected: false, // 預設未領取
-                    };
-                });
-                
-                setReservations(mappedReservations);
+
+                    setReservations(mappedReservations);
                 })
                 .catch(err => {
                     console.error("Failed to load reservations:", err);
@@ -923,27 +1043,27 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
     // check distance
     useEffect(() => {
         if (isMyFood) return;
-        
+
         (async () => {
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
-            setLocationError('需要定位權限才能判斷是否在預約範圍內');
-            return;
+                setLocationError('需要定位權限才能判斷是否在預約範圍內');
+                return;
             }
 
             try {
-            const location = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.High,
-            });
+                const location = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.High,
+                });
 
-            setUserLocation({
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-            });
+                setUserLocation({
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                });
 
-            setLocationError(null);
+                setLocationError(null);
             } catch (e) {
-            setLocationError('無法取得 GPS 位置，請確認定位已開啟');
+                setLocationError('無法取得 GPS 位置，請確認定位已開啟');
             }
         })();
     }, [isMyFood]);
@@ -962,7 +1082,7 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
     const isWithinDistance = useMemo(() => {
         if (isMyFood) return true;
         if (distanceToPost == null) return false;
-        
+
         return distanceToPost <= location.distance_restriction;
     }, [isMyFood, distanceToPost, location.distance_restriction]);
 
@@ -979,102 +1099,102 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, IsRes
     }, [isMyFood, myUserId, location.food_id]);
     // here end
 
-    const canReserve = userLocation &&isWithinDistance &&warningTimes < 2;
+    const canReserve = userLocation && isWithinDistance && warningTimes < 2;
 
     return (
         <ScrollView>
-        <View style={{ paddingBottom: 16 }}>
-            {isMyFood ? (
-                // 渲染 Provider 介面
-                <ProviderFoodStatusView
-                    location={location}
-                    reservations={reservations}
-                    handleClose={handleClose}
-                />
-            ) : (
-                // 渲染 Receiver 介面
-                <View style={styles.receiverContentCard}>
-                    
-                    {/* 1. 頂部資訊區塊 (左圖右文) */}
-                    <View style={styles.topRow}>
-                        <Image source={location.image} style={styles.foodImage} />
-                        <View style={styles.infoRight}>
-                            {/* 右上角編輯/分享按鈕 */}
-                            <View style={styles.topRightButtonContainer}>
-                                <TouchableOpacity // here2
-                                    onPress={() =>
-                                        sharePost({
-                                            // base64Image: location.image, // 你的 base64
-                                            address: location.address,
-                                            foodItems: location.food_items,
-                                        })
-                                    }
-                                > 
+            <View style={{ paddingBottom: 16 }}>
+                {isMyFood ? (
+                    // 渲染 Provider 介面
+                    <ProviderFoodStatusView
+                        location={location}
+                        reservations={reservations}
+                        handleClose={handleClose}
+                    />
+                ) : (
+                    // 渲染 Receiver 介面
+                    <View style={styles.receiverContentCard}>
+
+                        {/* 1. 頂部資訊區塊 (左圖右文) */}
+                        <View style={styles.topRow}>
+                            <Image source={location.image} style={styles.foodImage} />
+                            <View style={styles.infoRight}>
+                                {/* 右上角編輯/分享按鈕 */}
+                                <View style={styles.topRightButtonContainer}>
+                                    <TouchableOpacity // here2
+                                        onPress={() =>
+                                            sharePost({
+                                                // base64Image: location.image, // 你的 base64
+                                                address: location.address,
+                                                foodItems: location.food_items,
+                                            })
+                                        }
+                                    >
                                         <Ionicons name="share-social-outline" size={24} color="#333" />
                                     </TouchableOpacity>
+                                </View>
+
+                                <Text style={styles.receiverTitle}>{location.address}</Text>
+                                <Text style={styles.receiverDetailText}>{location.note}</Text>
+                                <Text style={styles.receiverRuleText}>{`此食物規定在${location.time_restriction}分鐘內領取`}</Text>
+                                <Text style={styles.receiverDetailText}>{`(${location.updated_at} 分鐘前編輯)`}</Text>
                             </View>
-
-                            <Text style={styles.receiverTitle}>{location.address}</Text>
-                            <Text style={styles.receiverDetailText}>{location.note}</Text>
-                            <Text style={styles.receiverRuleText}>{`此食物規定在${location.time_restriction}分鐘內領取`}</Text>
-                            <Text style={styles.receiverDetailText}>{`(${location.updated_at} 分鐘前編輯)`}</Text>
                         </View>
+
+                        {/* 2. 食物列表 */}
+                        {(location.food_items ?? []).map((food, index) => (
+                            <View key={index} style={styles.receiverFoodItemRow}>
+                                <Text style={styles.receiverFoodItemName}>{food.item_name}</Text>
+                                <Text style={styles.receiverFoodItemRemaining}>剩餘 {food.quantity} 份</Text>
+                            </View>
+                        ))}
+
+                        {/* 3. 底部動作區塊 */}
+                        {isReserved ? (
+                            <ReservedFoodView location={location} defaultTime={timeDefault} bookNum={numBook} user_id={myUserId} />
+                        ) : (
+                            // here start
+                            <View style={{ marginTop: 12 }}>
+                                {userLocation && !isWithinDistance && (
+                                    <Text style={styles.outOfRangeText}>
+                                        不在預約範圍內
+                                    </Text>
+                                )}
+                                {warningTimes === 1 && (
+                                    <Text style={{ color: '#E67E22', fontSize: 12, marginBottom: 6 }}>
+                                        ⚠️ 你已有 1 次未取餐紀錄，請準時領取以免被限制預約
+                                    </Text>
+                                )}
+                                {warningTimes >= 2 && (
+                                    <Text style={{ color: 'red', fontSize: 12 }}>
+                                        你已被限制預約此食物
+                                    </Text>
+                                )}
+
+                                <TouchableOpacity
+                                    style={[
+                                        styles.reserveButton,
+                                        !canReserve && styles.reserveButtonDisabled
+                                    ]}
+                                    disabled={!canReserve}
+                                    onPress={() => {
+                                        router.push({
+                                            pathname: '/(main)/reserve',
+                                            params: { food_id: location.food_id.toString() }
+                                        });
+                                    }}
+                                >
+                                    <Text style={styles.reserveButtonText}>
+                                        預約剩食
+                                    </Text>
+                                </TouchableOpacity>
+
+                            </View>
+                            // here end
+                        )}
                     </View>
-                    
-                    {/* 2. 食物列表 */}
-                    {(location.food_items ?? []).map((food, index) => (
-                        <View key={index} style={styles.receiverFoodItemRow}>
-                            <Text style={styles.receiverFoodItemName}>{food.item_name}</Text>
-                            <Text style={styles.receiverFoodItemRemaining}>剩餘 {food.quantity} 份</Text>
-                        </View>
-                    ))}
-                    
-                    {/* 3. 底部動作區塊 */}
-                    {isReserved ? (
-                        <ReservedFoodView location={location} defaultTime={timeDefault} bookNum={numBook} user_id={myUserId}/> 
-                    ) : (
-                        // here start
-                        <View style={{ marginTop: 12 }}>
-                            {userLocation &&!isWithinDistance && (
-                                <Text style={styles.outOfRangeText}>
-                                不在預約範圍內
-                                </Text>
-                            )}
-                            {warningTimes === 1 && (
-                                <Text style={{ color: '#E67E22', fontSize: 12, marginBottom: 6 }}>
-                                    ⚠️ 你已有 1 次未取餐紀錄，請準時領取以免被限制預約
-                                </Text>
-                            )}
-                            {warningTimes >= 2 && (
-                                <Text style={{ color: 'red', fontSize: 12 }}>
-                                    你已被限制預約此食物
-                                </Text>
-                            )}
-
-                            <TouchableOpacity
-                                style={[
-                                styles.reserveButton,
-                                !canReserve && styles.reserveButtonDisabled
-                                ]}
-                                disabled={!canReserve}
-                                onPress={() => {
-                                router.push({
-                                    pathname: '/(main)/reserve',
-                                    params: { food_id: location.food_id.toString() }
-                                });
-                                }}
-                            >
-                                <Text style={styles.reserveButtonText}>
-                                    預約剩食
-                                </Text>
-                            </TouchableOpacity>
-
-                        </View>
-                        // here end
-                    )}
-                </View>
-            )}
-        </View>
+                )}
+            </View>
         </ScrollView>
     );
 }
@@ -1148,7 +1268,7 @@ const styles = StyleSheet.create({
         marginBottom: 15,
     },
     reserveButton: {
-        backgroundColor: '#576238', 
+        backgroundColor: '#576238',
         padding: 15,
         borderRadius: 8,
         marginTop: 20,
@@ -1173,7 +1293,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#CCC',
     },
     // here end
-    
+
     // --- 發布者專屬樣式 (MyFoodAccessView) ---
     noAccessContainer: {
         flexDirection: 'row',
@@ -1216,7 +1336,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#999',
     },
-    
+
     // --- 預約者專屬樣式 (ReservedFoodView) ---
     reservedContentWrapper: {
         alignItems: 'center',
@@ -1276,7 +1396,9 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
     },
-    
+
+
+
     // -- 驗證畫面 (arrived status) --
     verificationPrompt: {
         backgroundColor: 'rgba(255,255,255,0.9)',
@@ -1308,7 +1430,7 @@ const styles = StyleSheet.create({
         color: '#333',
         textAlign: 'center',
     },
-    
+
     // -- 評論畫面 (finish status) --
     commentSection: {
         alignItems: 'center',
@@ -1374,7 +1496,7 @@ const styles = StyleSheet.create({
     addressContainer: {
         flexDirection: 'row', // 讓地址和驗證圖案並排
         alignItems: 'center',
-        flex: 1, 
+        flex: 1,
     },
     verificationIconText: {
         fontSize: 18, // 確保與地址文字大小相匹配
@@ -1426,6 +1548,57 @@ const styles = StyleSheet.create({
         color: 'red',
         fontWeight: 'bold',
     },
+    // 未移動遮罩
+    noMoveOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.35)",
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: 24,
+    },
+    noMoveCard: {
+        width: "100%",
+        maxWidth: 320,
+        backgroundColor: "#5B5F3B", // 你截圖那個綠底
+        borderRadius: 24,
+        paddingVertical: 28,
+        paddingHorizontal: 20,
+        alignItems: "center",
+    },
+    noMoveTitle: {
+        fontSize: 36,
+        fontWeight: "800",
+        color: "#F2F0E6",
+        lineHeight: 42,
+        textAlign: "center",
+    },
+    keepButton: {
+        marginTop: 26,
+        width: "100%",
+        paddingVertical: 18,
+        borderRadius: 22,
+        backgroundColor: "#79B22C",
+        alignItems: "center",
+    },
+    keepButtonText: {
+        fontSize: 26,
+        fontWeight: "800",
+        color: "#F2F0E6",
+    },
+    cancelReserveButton: {
+        marginTop: 18,
+        width: "100%",
+        paddingVertical: 18,
+        borderRadius: 22,
+        backgroundColor: "#B24A4A",
+        alignItems: "center",
+    },
+    cancelReserveButtonText: {
+        fontSize: 26,
+        fontWeight: "800",
+        color: "#F2F0E6",
+    }
+
 });
 
 // --- ReservationListView 專用樣式 (listStyles) ---
@@ -1469,7 +1642,7 @@ const listStyles = StyleSheet.create({
         flex: 1.2,
         textAlign: 'center',
     },
-    
+
     reservationRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1481,7 +1654,7 @@ const listStyles = StyleSheet.create({
     collectedRow: {
         backgroundColor: '#FAFAFA', // 已領取變淡色
     },
-    
+
     // Cell 樣式
     cellNumber: {
         fontSize: 14,

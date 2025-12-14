@@ -1,6 +1,35 @@
 // api.js
 
-const BASE_URL = 'http://172.18.11.163:8000'; 
+export const BASE_URL = "http://192.168.0.100:8000";
+
+async function debugFetch(url, options = {}) {
+    console.log("========== FETCH START ==========");
+    console.log("[URL]", url);
+    console.log("[OPTIONS]", options);
+
+    try {
+        const res = await fetch(url, options);
+        console.log("[RESPONSE STATUS]", res.status);
+
+        const text = await res.text();
+        console.log("[RESPONSE BODY RAW]", text);
+
+        try {
+            const json = JSON.parse(text);
+            console.log("[RESPONSE JSON]", json);
+            return json;
+        } catch {
+            return text;
+        }
+    } catch (err) {
+        console.error("❌ FETCH FAILED");
+        console.error(err);
+        throw err;
+    } finally {
+        console.log("=========== FETCH END ===========");
+    }
+}
+
 
 // 發布貼文
 export async function publishFoodPost(payload) {
@@ -19,15 +48,15 @@ export async function publishFoodPost(payload) {
         } catch (e) {
             throw new Error(`API 請求失敗 (HTTP ${response.status}): ${response.statusText}`);
         }
-        
+
         if (response.status === 422 && errorData.detail) {
-            const validationErrors = errorData.detail.map((err: any) => 
+            const validationErrors = errorData.detail.map((err: any) =>
                 `欄位: ${err.loc.slice(1).join('.')} - 錯誤: ${err.msg}`
             ).join('; ');
-            
+
             throw new Error(`數據驗證失敗 (422)。請檢查欄位格式: ${validationErrors}`);
         }
-        
+
         const errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData) || '未知伺服器錯誤';
         throw new Error(`API 請求失敗 (HTTP ${response.status}): ${errorMessage}`);
     }
@@ -39,17 +68,17 @@ export async function publishFoodPost(payload) {
 export async function fetchPosts() {
     try {
         const response = await fetch(`${BASE_URL}/posts/`);
-        
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data = await response.json();
-        return data; 
-        
+        return data;
+
     } catch (error) {
         console.error("Error fetching posts:", error);
-        throw error; 
+        throw error;
     }
 }
 
@@ -186,11 +215,11 @@ export const createReservation = async (reservationData) => {
                     errorMessage = JSON.stringify(errorData.detail);
                 }
             }
-            
+
             throw new Error(errorMessage);
         }
 
-        return await response.json(); 
+        return await response.json();
     } catch (error) {
         console.error('createReservation Error:', error);
         throw error;
@@ -206,7 +235,7 @@ export async function pickupSuccess(userId, foodId, comment = "") {
             body: JSON.stringify({
                 user_id: userId,
                 food_id: foodId,
-                comment: comment, 
+                comment: comment,
             }),
         });
         if (!response.ok) {
@@ -215,7 +244,7 @@ export async function pickupSuccess(userId, foodId, comment = "") {
             throw new Error(`領取失敗: ${errorMessage}`);
         }
 
-        return await response.json(); 
+        return await response.json();
     } catch (error) {
         console.error('pickupSuccess Error:', error);
         throw error;
@@ -234,4 +263,23 @@ export async function fetchWarningTimes(userId, foodId) {
 
     // 保險寫法，避免 undefined
     return warning?.warning_times ?? 0;
+}
+export async function fetchUsersLocations(userIds) {
+    console.log("[API] POST /users/locations user_ids =", userIds);
+    console.log("[API] BASE_URL =", BASE_URL);
+
+    const response = await fetch(`${BASE_URL}/users/locations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_ids: userIds }),
+    });
+
+    const text = await response.text();
+    console.log("[API] status =", response.status);
+    console.log("[API] body =", text);
+
+    if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+
+    const locs = JSON.parse(text);
+    return locs;
 }
