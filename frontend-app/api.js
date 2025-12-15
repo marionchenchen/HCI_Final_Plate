@@ -2,6 +2,54 @@
 
 const BASE_URL = 'http://172.18.108.187:8000'; 
 
+async function debugFetch(url, options = {}) {
+    console.log("========== FETCH START ==========");
+    console.log("[URL]", url);
+    console.log("[OPTIONS]", options);
+
+    try {
+        const res = await fetch(url, options);
+        console.log("[RESPONSE STATUS]", res.status);
+
+        const text = await res.text();
+        console.log("[RESPONSE BODY RAW]", text);
+
+        try {
+            const json = JSON.parse(text);
+            console.log("[RESPONSE JSON]", json);
+            return json;
+        } catch {
+            return text;
+        }
+    } catch (err) {
+        console.error("❌ FETCH FAILED");
+        console.error(err);
+        throw err;
+    } finally {
+        console.log("=========== FETCH END ===========");
+    }
+}
+
+export async function fetchUsersLocations(userIds) {
+    console.log("[API] POST /users/locations user_ids =", userIds);
+    console.log("[API] BASE_URL =", BASE_URL);
+
+    const response = await fetch(`${BASE_URL}/users/locations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_ids: userIds }),
+    });
+
+    const text = await response.text();
+    console.log("[API] status =", response.status);
+    console.log("[API] body =", text);
+
+    if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+
+    const locs = JSON.parse(text);
+    return locs;
+}
+
 // 發布貼文
 export async function publishFoodPost(payload) {
     const response = await fetch(`${BASE_URL}/posts/`, {
