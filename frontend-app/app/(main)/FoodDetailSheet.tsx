@@ -1,14 +1,14 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { 
     View, Text, StyleSheet, ScrollView, 
-    TouchableOpacity, Image, Alert, Dimensions, TextInput, FlatList 
+    TouchableOpacity, Image, Alert, Dimensions, TextInput, FlatList, Modal 
 } from 'react-native';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Share, ImageSourcePropType } from 'react-native';
 import { usePostRefresh } from "../../context/PostRefreshContext";
 import { fetchReservationsByFood, fetchReserveInfoByUser, fetchWarningTimes,
-    pickupSuccess, pickupFail, modifyReservation
+    pickupSuccess, pickupFail, modifyReservation, fetchUsersLocations
 } from "../../api";
 import * as Location from 'expo-location'; // here
 import * as FileSystem from 'expo-file-system'; // here2
@@ -229,22 +229,16 @@ const ProviderFoodStatusView = ({
                 { text: "取消", style: "cancel" },
                 { 
                     text: "確認", 
-                    onPress: async () => { // ⭐️ 變成非同步函式 (async)
+                    onPress: async () => {
                         try {
-                            // ⭐️ 呼叫 API 通知後端。Provider 不留言，所以 comment 留空。
                             const result = await pickupSuccess(userId, foodId, ""); 
 
-                            // 成功後才更新本地狀態，視覺上標記為已領取
                             setLocalReservations(prev => 
                                 prev.filter(userGroup => userGroup.user_id !== userId)
                             );
                             
-                            // 根據後端回傳的訊息給予使用者回饋
                             if (result.message && result.message.includes("post removed")) {
                                 Alert.alert("領取成功", "恭喜！所有食物已清空，貼文已自動刪除。");
-                                // 這裡可能需要一個 callback 函式來通知父元件 (foodDetailSheet) 關閉或刷新，
-                                // 假設您有一個名為 onPostRemoved 的 prop:
-                                // onPostRemoved();
                                 handleClose();
                                 triggerRefresh();
                             } else {
@@ -391,6 +385,21 @@ interface ReservedFoodViewProps
     handleClose: () => void;
 }
 
+function distanceMeters(aLat: number, aLng: number, bLat: number, bLng: number) {
+    const R = 6371000; // meters
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(bLat - aLat);
+    const dLng = toRad(bLng - aLng);
+    const lat1 = toRad(aLat);
+    const lat2 = toRad(bLat);
+
+    const x =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+
+    return 2 * R * Math.asin(Math.sqrt(x));
+}
+
 const ReservedFoodView = ({ location, user_id, reservations, handleClose }: ReservedFoodViewProps) => {
 
     // 完整預約資訊
@@ -457,6 +466,73 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
         return () => clearInterval(timer);
         
     }, [status]); 
+
+    // 未移動檢查邏輯
+    const [showNoMoveModal, setShowNoMoveModal] = useState(false);
+    const hasCheckedRef = useRef(false);
+    useEffect(() => {
+        console.log("[NO_MOVE_CHECK] timeLeft =", timeLeft);
+        console.log("[NO_MOVE_CHECK] hasChecked =", hasCheckedRef);
+
+        if (timeLeft == null) return;
+        if (timeLeft > 30) return;
+        if (hasCheckedRef.current) return;
+
+        hasCheckedRef.current = true;
+
+        (async () => {
+            try {
+                // 1) 預約起點
+                const groups = await fetchReservationsByFood(location.food_id);
+
+                const myGroup = groups.find(g => g.user_id === user_id);
+
+                const myRes = myGroup?.reservations?.[0];
+
+                if (!myRes?.gps_latitude || !myRes?.gps_longitude) {
+                    console.warn("❌ no reservation gps");
+                    return;
+                }
+
+                // 2) 目前位置
+                const locs = await fetchUsersLocations([user_id]);
+                console.log("[NO_MOVE_CHECK] locs =", locs);
+
+                if (!Array.isArray(locs) || locs.length === 0) {
+                    console.warn("[NO_MOVE_CHECK] no location record");
+                    return;
+                }
+
+                const me = locs[0];
+                if (
+                    me.gps_latitude == null ||
+                    me.gps_longitude == null
+                ) {
+                    console.warn("[NO_MOVE_CHECK] gps missing", me);
+                    return;
+                }
+
+                // 3) 算距離
+                const d = distanceMeters(
+                    myRes.gps_latitude,
+                    myRes.gps_longitude,
+                    me.gps_latitude,
+                    me.gps_longitude
+                );
+
+                console.log("[NO_MOVE_CHECK] distance (m) =", d);
+
+                if (d < 200) {
+                    console.log("⚠️ NO MOVE detected → show modal");
+                    setShowNoMoveModal(true);
+                } else {
+                    console.log("✅ user moved");
+                }
+            } catch (e) {
+                console.error("❌ NO_MOVE_CHECK failed", e);
+            }
+        })();
+    }, [timeLeft]);
 
     // 抵達
     const handleArrived = () => {
@@ -700,8 +776,48 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
         );
     }
 
-    // 完整的 return 結構
-    return <View style={styles.reservedContentWrapper}>{content}</View>;
+    return (
+        <>
+            <View style={styles.reservedContentWrapper}>
+                {content}
+            </View>
+
+            <Modal
+                visible={showNoMoveModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowNoMoveModal(false)}
+            >
+                <View style={styles.noMoveOverlay}>
+                    <View style={styles.noMoveCard}>
+                        <Text style={styles.noMoveTitle}>偵測到你</Text>
+                        <Text style={styles.noMoveTitle}>5 分鐘內</Text>
+                        <Text style={styles.noMoveTitle}>尚未移動</Text>
+
+                        <TouchableOpacity
+                            style={styles.keepButton}
+                            onPress={() => {
+                                setShowNoMoveModal(false);
+                                // TODO: 後端加「保留但記警告」API
+                            }}
+                        >
+                            <Text style={styles.keepButtonText}>保留預約</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.cancelReserveButton}
+                            onPress={() => {
+                                setShowNoMoveModal(false);
+                                pickupFailed(user_id, location.food_id);
+                            }}
+                        >
+                            <Text style={styles.cancelReserveButtonText}>取消預約</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+        </>
+    );
 };
 
 // here start
@@ -1234,20 +1350,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 10,
         borderRadius: 20,
     },
-    commentTagText: {
-        fontSize: 14,
-        color: '#576238',
-    },
-    commentInput: {
-        borderWidth: 1,
-        borderColor: '#CCC',
-        borderRadius: 8,
-        width: '90%',
-        height: 70,
-        padding: 10,
-        marginTop: 10,
-        textAlignVertical: 'top',
-    },
     finishButton: {
         backgroundColor: '#D32F2F', // 圖中是紅色
         padding: 10,
@@ -1589,6 +1691,58 @@ const styles = StyleSheet.create({
         marginLeft: 10,
         alignItems: 'center',
     },
+    
+    // 未移動遮罩
+    // 未移動遮罩
+    noMoveOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.35)",
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: 24,
+    },
+    noMoveCard: {
+        width: "100%",
+        maxWidth: 320,
+        backgroundColor: "#5B5F3B", // 你截圖那個綠底
+        borderRadius: 24,
+        paddingVertical: 28,
+        paddingHorizontal: 20,
+        alignItems: "center",
+    },
+    noMoveTitle: {
+        fontSize: 36,
+        fontWeight: "800",
+        color: "#F2F0E6",
+        lineHeight: 42,
+        textAlign: "center",
+    },
+    keepButton: {
+        marginTop: 26,
+        width: "100%",
+        paddingVertical: 18,
+        borderRadius: 22,
+        backgroundColor: "#79B22C",
+        alignItems: "center",
+    },
+    keepButtonText: {
+        fontSize: 26,
+        fontWeight: "800",
+        color: "#F2F0E6",
+    },
+    cancelReserveButton: {
+        marginTop: 18,
+        width: "100%",
+        paddingVertical: 18,
+        borderRadius: 22,
+        backgroundColor: "#B24A4A",
+        alignItems: "center",
+    },
+    cancelReserveButtonText: {
+        fontSize: 26,
+        fontWeight: "800",
+        color: "#F2F0E6",
+    }
 });
 
 // --- ReservationListView 專用樣式 (listStyles) ---

@@ -68,6 +68,29 @@ interface FrontendReservationItem {
     is_collected: boolean;
 }
 
+// notification start
+const getDistanceKm = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+) => {
+  const toRad = (v: number) => (v * Math.PI) / 180;
+  const R = 6371;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+// notification end
+
 export default function Home() {
 
     const router = useRouter();
@@ -86,6 +109,29 @@ export default function Home() {
     const slideAnim = useState(new Animated.Value(0))[0];
 
     const [reservationMarkers, setReservationMarkers] = useState<FrontendReservationItem[]>([]);
+
+    // notification start
+    const [incomingPost, setIncomingPost] = useState<PostData | null>(null);
+    const seenPostIdsRef = React.useRef<Set<number>>(new Set());
+
+    // find new post
+    useEffect(() => {
+        if (posts.length === 0) return;
+
+        posts.forEach(p => seenPostIdsRef.current.add(p.food_id));
+    }, [posts]);
+    
+    // 5 秒後自動消失
+    useEffect(() => {
+        if (!incomingPost) return;
+
+        const timer = setTimeout(() => {
+            setIncomingPost(null);
+        }, 5000);
+
+        return () => clearTimeout(timer);
+    }, [incomingPost]);
+    // notification end
 
 	// 獲取定位資訊
     useEffect(() => {
@@ -183,6 +229,61 @@ export default function Home() {
 
         loadUserFood();
     }, [userId]);
+
+    // notification start
+    useEffect(() => {
+        if (!userRegion) return;
+
+        const interval = setInterval(async () => {
+            if (incomingPost) return;
+            try {
+                const apiPosts = await fetchPosts();
+
+                const transformed: PostData[] = apiPosts.map(post => {
+                    const apiPost = post as any;
+                    return {
+                        ...apiPost,
+                        food_items: (apiPost.items || []).map(i => ({
+                            item_name: i.item,
+                            quantity: i.number_online,
+                        })),
+                        image:
+                            apiPost.pictures?.length > 0
+                                ? { uri: `data:image/jpeg;base64,${apiPost.pictures[0].picture}` }
+                                : LocalFoodImage,
+                    };
+                });
+
+                // 找「新 post」
+                for (const post of transformed) {
+                    if (seenPostIdsRef.current.has(post.food_id)) continue;
+
+                    seenPostIdsRef.current.add(post.food_id);
+
+                    const distanceKm = getDistanceKm(
+                        userRegion.latitude,
+                        userRegion.longitude,
+                        post.gps_latitude,
+                        post.gps_longitude
+                    );
+
+                    if (distanceKm <= post.distance_restriction) {
+                        setIncomingPost(post); // 觸發小通知
+                        break;
+                    }
+                }
+
+                // setPosts(transformed);
+            } catch (e) {
+                console.error(e);
+            }
+        }, 3000); // 每 3 秒
+
+
+
+        return () => clearInterval(interval);
+    }, [userRegion, incomingPost]);
+    // notification end
     
 
     // const reservations = await fetchReservationsByUserAndFood(1, 2);
@@ -249,6 +350,26 @@ export default function Home() {
 
     return (
         <View style={styles.container}>
+            {/* notification start */}
+            {incomingPost && (
+                <TouchableOpacity
+                    style={styles.inAppNotification}
+                    onPress={() => {
+                        setIncomingPost(null);
+                        handleMarkerPress(incomingPost);
+                    }}
+                >
+                    <Image source={incomingPost.image} style={styles.notifyImage} />
+                    <View style={{ flex: 1 }}>
+                    <Text style={styles.notifyTitle}>附近有新的剩食!</Text>
+                    <Text style={styles.notifyText}>
+                        {incomingPost.address}
+                    </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#555" />
+                </TouchableOpacity>
+            )}
+            {/* notification end */}
             <MapView
                 style={styles.map}
                 showsUserLocation
@@ -391,4 +512,36 @@ const styles = StyleSheet.create({
         fontSize: 30,
         fontWeight: 'bold',
     },
+    // notification start
+    inAppNotification: {
+        position: 'absolute',
+        top: 50,
+        left: 16,
+        right: 16,
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        elevation: 6,
+        shadowColor: '#000',
+        shadowOpacity: 0.2,
+        shadowRadius: 6,
+        zIndex: 999,
+    },
+    notifyImage: {
+        width: 44,
+        height: 44,
+        borderRadius: 8,
+        marginRight: 10,
+    },
+    notifyTitle: {
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    notifyText: {
+        fontSize: 12,
+        color: '#666',
+    },
+    // notification end
 });
