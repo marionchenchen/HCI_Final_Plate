@@ -9,20 +9,32 @@ export default function MainScreenSimulation() {
     const { loginAs } = useUser();
 
     const demoUsers = [
-        { id: 1, name: 'Provider' },
-        { id: 2, name: 'Receiver 1' },
-        { id: 3, name: 'Receiver 2' },
+        { id: 1, name: 'Receiver 1' },
+        { id: 2, name: 'Receiver 2' },
+        { id: 3, name: 'Receiver 3' },
         // ... 
     ];
 
     const handleLogin = async (id: number) => {
         await loginAs(id);
-        router.push('/(main)/Home'); 
+        router.push('./Home2'); 
+    };
+
+    const _handleLogin = async (id: number) => {
+        await loginAs(id);
+        router.push('./Home'); 
     };
 
     return (
         <View style={styles.container}>
             <Text style={styles.title}>HCI Demo 入口網站</Text>
+            <TouchableOpacity
+                key={4}
+                style={styles.userButton}
+                onPress={() => _handleLogin(4)}
+            >
+                <Text style={styles.userText}>{`Provider`}</Text>
+            </TouchableOpacity>
             {demoUsers.map((user) => (
                 <TouchableOpacity
                     key={user.id}

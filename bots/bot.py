@@ -5,7 +5,7 @@ import requests
 # Setup
 # ============================================================
 
-API_BASE = "http://127.0.0.1:8000"
+API_BASE = "http://172.18.108.42:8000"
 
 
 def update_user_location(user_id: int, lat: float, lng: float):
@@ -16,7 +16,7 @@ def update_user_location(user_id: int, lat: float, lng: float):
         "gps_longitude": lng,
     }
     r = requests.patch(url, json=payload)
-    r.raise_for_status()
+    #r.raise_for_status()
 
 
 def interpolate(p1, p2, t: float):
