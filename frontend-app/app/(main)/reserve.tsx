@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  View, Text, StyleSheet,TouchableOpacity, 
-  Image, Dimensions, TextInput, Alert, ScrollView, ActivityIndicator
+import {
+   View, Text, StyleSheet, TouchableOpacity,
+   Image, Dimensions, TextInput, Alert, ScrollView, ActivityIndicator
 } from 'react-native';
-import * as Location from 'expo-location'; 
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ImageSourcePropType } from 'react-native';
 import { useUser } from '../../context/UserContext';
-import { createReservation, getPostById, fetchCommentsByFoodId } from '../../api';
+import { createReservation, getPostById, fetchUsersLocations, fetchCommentsByFoodId } from '../../api';
 import { usePostRefresh } from "../../context/PostRefreshContext";
 
+
 const { width } = Dimensions.get('window');
+
 
 interface Item {
     id: number; // 🚨 item id
@@ -19,38 +21,45 @@ interface Item {
     number_online: number; // 剩餘可預約數量
 }
 
+
 interface PostData {
     food_id: number;
     user_id: number;
     address: string; // *
     tags: string[]; // * // TODO
-    note: string; // * 
+    note: string; // *
     time_restriction: number; // *
     distance_restriction: number;
     created_at: string;
-    updated_at: number; // * 
+    updated_at: number; // *
     verification_icon: ImageSourcePropType; // **
     gps_latitude: number;
     gps_longitude: number;
-    
-    items: Item[]; // * 
-    image: ImageSourcePropType; // * 
-    
-    color: `#${string}`; 
+
+
+    items: Item[]; // *
+    image: ImageSourcePropType; // *
+
+
+    color: `#${string}`;
 }
+
 
 export default function ReserveQuantityScreen() {
     // 1. 獲取 food_id (來自 DetailFoodSheet 的 params)
-    const { food_id } = useLocalSearchParams(); 
+    const { food_id } = useLocalSearchParams();
     const router = useRouter();
-    const { userId } = useUser(); 
-    
+    const { userId } = useUser();
+
+
     // 2. 狀態
-    const [reserveQuantities, setReserveQuantities] = useState<{ [key: number]: number | '' }>({}); 
+    const [reserveQuantities, setReserveQuantities] = useState<{ [key: number]: number | '' }>({});
     const [postData, setPostData] = useState<PostData | null>(null); // 貼文所有資料
     const [loading, setLoading] = useState(true);
 
+
     const { triggerRefresh } = usePostRefresh();
+
 
     // 3. 使用 food_id 載入貼文資料
     useEffect(() => {
@@ -59,21 +68,23 @@ export default function ReserveQuantityScreen() {
             setLoading(true);
             try {
                 // 確保 food_id 是字串，並傳遞給 API
-                const data: PostData = await getPostById(food_id as string); 
+                const data: PostData = await getPostById(food_id as string);
                 setPostData(data);
-                
+
+
                 // 初始化預約數量為 0
                 const initialQuantities: { [key: number]: number | '' } = {};
                 (data.items ?? []).forEach(item => {
-                    const itemIdNumber = Number(item.id); 
+                    const itemIdNumber = Number(item.id);
                     if (itemIdNumber > 0) {
-                        initialQuantities[itemIdNumber] = ''; 
+                        initialQuantities[itemIdNumber] = '';
                     } else {
                         console.error('API returned item with invalid ID:', item);
                     }
                 });
                 setReserveQuantities(initialQuantities);
-                
+
+
             } catch (error) {
                 console.error('Error loading post:', error);
                 Alert.alert("載入失敗", "無法取得貼文資料，請檢查網路或後端服務。");
@@ -82,47 +93,74 @@ export default function ReserveQuantityScreen() {
             }
         };
 
+
         if (food_id) {
-             loadPost();
+            loadPost();
         } else {
-             setLoading(false);
+            setLoading(false);
         }
     }, [food_id]);
+
 
     // GPS 狀態
     const [gpsLocation, setGpsLocation] = useState<{ latitude: number | null, longitude: number | null }>({ latitude: null, longitude: null });
     const [locationError, setLocationError] = useState<string | null>(null);
 
+
     // --- 效果鉤子：獲取 GPS 定位 ---
     useEffect(() => {
         (async () => {
-            let { status } = await Location.requestForegroundPermissionsAsync();
-            if (status !== 'granted') {
-                setLocationError('發佈剩食需要地理位置權限，請前往設定開啟。');
-                return;
+            if (userId === 1 || userId === 2 || userId == 3) {
+                console.log(`UserID ${userId}: 執行 fetchCommentsByFoodId API 呼叫...`);
+                try {
+                    let locationArray = await fetchUsersLocations([userId]);
+                    if (locationArray && locationArray.length > 0) {
+                        
+                        const location = locationArray[0]; 
+                        const { gps_latitude, gps_longitude } = location;
+
+                        if (gps_latitude && gps_longitude) {
+                            setGpsLocation({ 
+                                latitude: gps_latitude, 
+                                longitude: gps_longitude 
+                            });
+                        }
+                    }
+                } catch (e) {
+                    setLocationError('無法取得DB GPS 位置，請檢查您的定位服務是否開啟。');
+                }
             }
-            
-            try {
-                let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-                setGpsLocation({
-                    latitude: location.coords.latitude,
-                    longitude: location.coords.longitude,
-                });
-                setLocationError(null);
-            } catch (e) {
-                setLocationError('無法取得 GPS 位置，請檢查您的定位服務是否開啟。');
+            else {
+                let { status } = await Location.requestForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                    setLocationError('發佈剩食需要地理位置權限，請前往設定開啟。');
+                    return;
+                }
+                try {
+                    let location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+                    setGpsLocation({
+                        latitude: location.coords.latitude,
+                        longitude: location.coords.longitude,
+                    });
+                    setLocationError(null);
+                } catch (e) {
+                    setLocationError('無法取得 GPS 位置，請檢查您的定位服務是否開啟。');
+                }
             }
         })();
     }, []);
+
 
     // 評論
     const [comments, setComments] = useState<any[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isCommentsLoading, setIsCommentsLoading] = useState(true);
     const [commentError, setCommentError] = useState<string | null>(null);
-    
+
+
     useEffect(() => {
         if (!food_id) return; // 確保 foodId 存在
+
 
         const loadComments = async () => {
             setIsCommentsLoading(true);
@@ -138,8 +176,10 @@ export default function ReserveQuantityScreen() {
             }
         };
 
+
         loadComments();
     }, [food_id]);
+
 
     const handlePrev = () => {
         if (comments.length > 0) {
@@ -147,31 +187,37 @@ export default function ReserveQuantityScreen() {
         }
     };
 
+
     const handleNext = () => {
         if (comments.length > 0) {
             setCurrentIndex(prev => (prev + 1) % comments.length);
         }
     };
 
+
     const currentCommentText = isCommentsLoading
         ? "正在載入評論..."
         : commentError
-        ? commentError
-        : comments.length > 0
-        ? comments[currentIndex].comment
-        : "目前沒有評論";
-    
+            ? commentError
+            : comments.length > 0
+                ? comments[currentIndex].comment
+                : "目前沒有評論";
+
+
+
 
     // 處理輸入數量改變
     const handleQuantityChange = (itemId: number, quantity: string) => {
         const cleanedQuantity = quantity.replace(/[^0-9]/g, '');
         const numValue: number | '' = cleanedQuantity === '' ? '' : parseInt(cleanedQuantity, 10);
-        
+
+
         setReserveQuantities(prev => ({
             ...prev,
             [itemId]: numValue,
         }));
     };
+
 
     // 4. 提交預約邏輯
     const handleReservationSubmit = async () => {
@@ -180,27 +226,32 @@ export default function ReserveQuantityScreen() {
             return;
         }
 
+
         if (gpsLocation.latitude === null || gpsLocation.longitude === null) {
             Alert.alert('等待定位', locationError || '正在獲取您的當前位置，請稍候再試。');
             return; // ⭐️ 這段已經可以確保 GPS 欄位不會是 null
         }
-        
+
+
         // 🚀 步驟 1: 整理 Items 陣列
         const requestedItems = [];
         let totalReservedCount = 0;
+
 
         // 迭代 postData.items，只收集有預約數量的品項
         (postData.items ?? []).forEach(item => {
             const quantity = reserveQuantities[item.id] || 0;
             const numBooked = typeof quantity === 'number' ? quantity : parseInt(String(quantity), 10);
-            
+
+
             if (numBooked > 0) {
                 // 檢查是否超額 (使用 item.number_online)
-                if (numBooked > item.number_online) { 
+                if (numBooked > item.number_online) {
                     Alert.alert('數量錯誤', `${item.item} 預約數量 (${numBooked}) 超過剩餘數量 (${item.number_online})。`);
                     throw new Error('Quantity exceeded');
                 }
-                
+
+
                 // 構建單一品項的請求物件
                 requestedItems.push({
                     item_id: item.id,
@@ -210,15 +261,18 @@ export default function ReserveQuantityScreen() {
             }
         });
 
+
         if (totalReservedCount === 0) {
             Alert.alert('請輸入數量', '請至少預約一份食物。');
             return;
         }
 
+
         console.log('Final Requested Items:', requestedItems);
         console.log('User ID:', userId);
         console.log('Food ID:', postData.food_id);
-        
+
+
         // 🚀 步驟 2: 構建完整的單一請求物件
         const reservationPayload = {
             food_id: Number(postData.food_id),
@@ -228,54 +282,66 @@ export default function ReserveQuantityScreen() {
             items: requestedItems, // 包含所有預約品項
         };
 
+
         try {
             // 🚀 步驟 3: 只呼叫一次 API
             const newReservations = await createReservation(reservationPayload);
 
+
             triggerRefresh();
             Alert.alert('預約成功', `已成功預約 ${newReservations.length} 個品項！`);
             // TODO: 如果有 PostRefreshContext，請在這裡呼叫 triggerRefresh()
-            router.navigate('/(main)/Home');
+            if(userId == 1 || userId == 2 || userId == 3){
+                router.navigate('/(main)/Home2');
+            } else{
+                router.navigate('/(main)/Home');
+            }
         } catch (error) {
             console.error('Reservation failed:', error);
             Alert.alert('預約失敗', error.message || '連線錯誤或後端處理失敗，請稍後再試。');
         }
     };
 
+
     if (loading) {
         return <ActivityIndicator size="large" style={styles.loadingContainer} color="#576238" />;
     }
     if (!postData) {
-        return <Text style={{padding: 20}}>找不到貼文資料，請返回。</Text>;
+        return <Text style={{ padding: 20 }}>找不到貼文資料，請返回。</Text>;
     }
 
+
     const mainImageSource: ImageSourcePropType = postData.image;
+
 
     return (
         <View style={styles.container}>
             <ScrollView contentContainerStyle={styles.quantityBody}>
-                
+
+
                 {/* 圖片與主要資訊 */}
                 <View style={styles.quantityInfo}>
-                    <Image 
+                    <Image
                         source={postData.image}
                         style={styles.quantityInfoImage}
                     />
-                    <Text style={styles.quantityInfoTitle}>{postData.address}</Text> 
+                    <Text style={styles.quantityInfoTitle}>{postData.address}</Text>
                     <Text style={styles.quantityInfoDetail}>{postData.note}</Text>
                     <Text style={styles.quantityInfoDetail}>{`此食物規定在${postData.time_restriction}分鐘內領取`}</Text>
                 </View>
+
 
                 {/* 評論區 */}
                 <Text style={styles.commentLabel}>其他人對這份食物的評論</Text>
                 <View style={styles.commentBox}>
                     {/* 箭頭：只有當評論數量大於 1 且載入完成時才啟用 */}
-                    <TouchableOpacity 
-                        onPress={handlePrev} 
+                    <TouchableOpacity
+                        onPress={handlePrev}
                         disabled={comments.length <= 1 || isCommentsLoading || !!commentError}
                     >
                         <Ionicons name="caret-back" size={24} color="#333" />
                     </TouchableOpacity>
+
 
                     <TextInput
                         style={styles.commentInput}
@@ -284,14 +350,16 @@ export default function ReserveQuantityScreen() {
                         multiline={true} // 允許顯示多行評論
                     />
 
+
                     {/* 箭頭：只有當評論數量大於 1 且載入完成時才啟用 */}
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         onPress={handleNext}
                         disabled={comments.length <= 1 || isCommentsLoading || !!commentError}
                     >
                         <Ionicons name="caret-forward" size={24} color="#333" />
                     </TouchableOpacity>
                 </View>
+
 
                 {/* 預約數量區塊 */}
                 <View style={styles.quantityFormCard}>
@@ -301,7 +369,7 @@ export default function ReserveQuantityScreen() {
                     </View>
                     {(postData.items ?? []).map((item) => (
                         // 🚨 使用 item.item_id 作為 key
-                        <View key={Number(item.id)} style={styles.quantityInputRow}> 
+                        <View key={Number(item.id)} style={styles.quantityInputRow}>
                             <Text style={styles.quantityFoodName}>{item.item}</Text>
                             <Text style={styles.quantityRemaining}>剩餘 {item.number_online} 份</Text>
                             <TextInput
@@ -316,7 +384,8 @@ export default function ReserveQuantityScreen() {
                     ))}
                 </View>
             </ScrollView>
-            
+
+
             {/* 提交按鈕 */}
             <View style={styles.quantityFixedFooter}>
                 <TouchableOpacity style={styles.quantitySubmitButton} onPress={handleReservationSubmit}>
@@ -327,6 +396,7 @@ export default function ReserveQuantityScreen() {
     );
 }
 
+
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#4F7942' },
     quantityBody: {
@@ -335,7 +405,8 @@ const styles = StyleSheet.create({
         padding: 20,
         paddingBottom: 100,
     },
-    
+
+
     // 資訊區塊
     quantityInfo: {
         alignItems: 'center',
@@ -354,7 +425,8 @@ const styles = StyleSheet.create({
     quantityInfoTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
     quantityInfoDetail: { fontSize: 16, color: '#666', marginTop: 5 },
     quantityInfoDistance: { flexDirection: 'row', alignItems: 'center', marginTop: 5 },
-    
+
+
     // 評論區
     commentLabel: { fontSize: 14, color: '#333', textAlign: 'center', marginBottom: 10 },
     commentBox: {
@@ -375,6 +447,7 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#eee',
     },
+
 
     // 預約數量表單
     quantityFormCard: {
@@ -414,7 +487,8 @@ const styles = StyleSheet.create({
         fontSize: 16,
         height: 40,
     },
-    
+
+
     // 固定底部按鈕
     quantityFixedFooter: {
         padding: 20,
@@ -437,3 +511,4 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
 });
+

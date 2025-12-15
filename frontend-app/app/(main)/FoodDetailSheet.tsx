@@ -470,40 +470,84 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
     // 未移動檢查邏輯
     const [showNoMoveModal, setShowNoMoveModal] = useState(false);
     const hasCheckedRef = useRef(false);
+    const [gpsLocation, setGpsLocation] = useState<{ latitude: number | null, longitude: number | null }>({ latitude: null, longitude: null });
+    const [locationError, setLocationError] = useState<string | null>(null);
     useEffect(() => {
         console.log("[NO_MOVE_CHECK] timeLeft =", timeLeft);
         console.log("[NO_MOVE_CHECK] hasChecked =", hasCheckedRef);
+
 
         if (timeLeft == null) return;
         if (timeLeft > 30) return;
         if (hasCheckedRef.current) return;
 
+
         hasCheckedRef.current = true;
+
 
         (async () => {
             try {
                 // 1) 預約起點
                 const groups = await fetchReservationsByFood(location.food_id);
 
+
                 const myGroup = groups.find(g => g.user_id === user_id);
 
+
                 const myRes = myGroup?.reservations?.[0];
+
 
                 if (!myRes?.gps_latitude || !myRes?.gps_longitude) {
                     console.warn("❌ no reservation gps");
                     return;
                 }
-
+                let me: { gps_latitude: number | null; gps_longitude: number | null } = {
+                    gps_latitude: null,
+                    gps_longitude: null,
+                };
                 // 2) 目前位置
-                const locs = await fetchUsersLocations([user_id]);
-                console.log("[NO_MOVE_CHECK] locs =", locs);
+                if (user_id == 1 || user_id == 2 || user_id == 3) {
+                    const locs = await fetchUsersLocations([user_id]);
+                    console.log("[NO_MOVE_CHECK] locs =", locs);
 
-                if (!Array.isArray(locs) || locs.length === 0) {
-                    console.warn("[NO_MOVE_CHECK] no location record");
-                    return;
+
+                    if (!Array.isArray(locs) || locs.length === 0) {
+                        console.warn("[NO_MOVE_CHECK] no location record");
+                        return;
+                    }
+                    me = locs[0];
+                }
+                else {
+                    //抓gps位置
+                    // --- GPS 獲取邏輯開始 ---
+                    let { status } = await Location.requestForegroundPermissionsAsync();
+
+
+                    if (status !== 'granted') {
+                        setLocationError('需要地理位置權限，請前往設定開啟。');
+                        console.warn('GPS Error: Permission not granted');
+                        // 🚨 這裡可能需要中斷後續操作或返回
+                        return;
+                    }
+
+
+                    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+                    console.log("[NO_MOVE_CHECK] GPS pos =", pos.coords);
+
+
+                    me = {
+                        gps_latitude: pos.coords.latitude,
+                        gps_longitude: pos.coords.longitude,
+                    };
+
+
+                    setGpsLocation({ latitude: me.gps_latitude, longitude: me.gps_longitude });
+                    setLocationError(null);
                 }
 
-                const me = locs[0];
+
+
+
                 if (
                     me.gps_latitude == null ||
                     me.gps_longitude == null
@@ -511,6 +555,7 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
                     console.warn("[NO_MOVE_CHECK] gps missing", me);
                     return;
                 }
+
 
                 // 3) 算距離
                 const d = distanceMeters(
@@ -520,9 +565,11 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
                     me.gps_longitude
                 );
 
+
                 console.log("[NO_MOVE_CHECK] distance (m) =", d);
 
-                if (d < 200) {
+
+                if (d < 100) {
                     console.log("⚠️ NO MOVE detected → show modal");
                     setShowNoMoveModal(true);
                 } else {
@@ -533,6 +580,7 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
             }
         })();
     }, [timeLeft]);
+
 
     // 抵達
     const handleArrived = () => {
@@ -790,9 +838,9 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
             >
                 <View style={styles.noMoveOverlay}>
                     <View style={styles.noMoveCard}>
-                        <Text style={styles.noMoveTitle}>偵測到你</Text>
-                        <Text style={styles.noMoveTitle}>5 分鐘內</Text>
-                        <Text style={styles.noMoveTitle}>尚未移動</Text>
+                        <Text style={styles.noMoveTitle}>偵測到您</Text>
+                        <Text style={styles.noMoveTitle}>一段時間</Text>
+                        <Text style={styles.noMoveTitle}>未移動</Text>
 
                         <TouchableOpacity
                             style={styles.keepButton}
@@ -808,7 +856,7 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
                             style={styles.cancelReserveButton}
                             onPress={() => {
                                 setShowNoMoveModal(false);
-                                pickupFailed(user_id, location.food_id);
+                                handleCancel();
                             }}
                         >
                             <Text style={styles.cancelReserveButtonText}>取消預約</Text>
