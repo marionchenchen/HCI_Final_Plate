@@ -53,7 +53,7 @@ interface PostData {
     food_items: FoodItem[]; // * 
     image: ImageSourcePropType; // * 
     
-    color: `#${string}`; 
+    color: string; 
 }
 
 interface FrontendReservationItem {
@@ -329,6 +329,13 @@ export default function Home() {
         }
     };
 
+    const getPostColor = (post: PostData) => {
+        if (post.user_id === userId) return CircleColors[1];    
+        if (post.food_id === userFoodId) return CircleColors[2]; 
+        if (post.food_items?.every(i => i.quantity === 0)) return CircleColors[3];
+        return CircleColors[0];                               
+    };
+
     // --- Render ---
 
     // 處理載入和錯誤狀態
@@ -387,14 +394,14 @@ export default function Home() {
                 {posts.map((post) => {
                     const isTracksView = tracksViewMap[post.food_id] ?? true; 
                     const isTrack = post.food_items?.every(item=>item.quantity === 0);
-                    let colorIndex = 0;
+
+                    // let colorIndex = 0;
+                    // if (post.user_id === userId) colorIndex = 1;
+                    // else if (post.food_id === userFoodId) colorIndex = 2;
+                    // else if (isTrack) colorIndex = 3;
+                    // post.color = CircleColors[colorIndex];
                     const isReserve = userFoodId === post.food_id;
-                    console.log("isReserve" + post.food_id + isReserve);
-                    if (post.user_id === userId) colorIndex = 1;
-                    else if (post.food_id === userFoodId) colorIndex = 2;
-                    else if (isTrack) colorIndex = 3;
-                    
-                    
+
                     return (
                         <Marker
                         key={post.food_id} 
@@ -411,7 +418,7 @@ export default function Home() {
                             height: 35,
                             borderRadius: 20,
                             borderWidth: 2,
-                            borderColor: CircleColors[colorIndex],
+                            borderColor: getPostColor(post),
                             backgroundColor: 'white',
                             justifyContent: 'center',
                             alignItems: 'center',
@@ -426,12 +433,14 @@ export default function Home() {
                     );
                 })}
 
+                
                 {selectedPost && (
+                    
                     <Circle
                         center={{ latitude: selectedPost.gps_latitude, longitude: selectedPost.gps_longitude }}
-                        radius={selectedPost.distance_restriction}
-                        strokeColor={`${selectedPost.color}AA`}
-                        fillColor={`${selectedPost.color}33`}
+                        radius={selectedPost.distance_restriction * 1000}
+                        strokeColor={`${getPostColor(selectedPost)}AA`}
+                        fillColor={`${getPostColor(selectedPost)}33`}
                     />
                 )}
             </MapView>

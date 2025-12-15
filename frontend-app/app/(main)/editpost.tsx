@@ -374,48 +374,48 @@ export default function EditPostScreen() {
     if (userLoading || isLoading) return <Text style={{ padding: 20 }}>載入中...</Text>;
 
     return (
-        <KeyboardAvoidingView 
-            style={{ flex: 1 }} 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-        <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+<KeyboardAvoidingView 
+style={{ flex: 1 }} 
+behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+>
+<ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
 
-            <View style={styles.formCard}>
-            
-            {/* 1. 剩食名稱與數量 (現有部分) */}
-            <Text style={styles.label}><Ionicons name="document-text" size={18} color="#333" /> 剩食名稱與數量</Text>
-            {items.map((item, index) => (
-                <FoodItemInput 
-                key={item.id}
-                index={index}
-                foodItem={item}
-                onFoodItemChange={handleFoodItemChange}
-                onDelete={handleDeleteFoodItem}
-                />
-            ))}
+<View style={styles.formCard}>
 
-            {/* 4. 備註 (Note) (新增) */}
-            <Text style={styles.label}><Ionicons name="create" size={18} color="#333" /> 備註</Text>
-            <TextInput 
-                style={styles.noteInput} 
-                value={note} 
-                onChangeText={setNote} 
-                multiline 
-                placeholder="請輸入備註，例如：領取容器規定..."
-            />
-            
-            {/* 確認修改按鈕 (保持不變) */}
-            <TouchableOpacity 
-                style={styles.publishButton} 
-                onPress={handleUpdate}
-                disabled={isLoading} 
-            >
-                <Text style={styles.publishButtonText}>
-                    {isLoading ? "修改中..." : "確認修改"}
-                </Text>
-            </TouchableOpacity>
-            </View>
-        </ScrollView>
-        </KeyboardAvoidingView>
-    );
+{/* 1. 剩食名稱與數量 (現有部分) */}
+<Text style={styles.label}><Ionicons name="document-text" size={18} color="#333" /> 剩食名稱與數量</Text>
+{items.map((item, index) => (
+ <FoodItemInput 
+key={item.id}
+index={index}
+foodItem={item}
+onFoodItemChange={handleFoodItemChange}
+ onDelete={handleDeleteFoodItem}
+/>
+))}
+
+{/* 4. 備註 (Note) (新增) */}
+ <Text style={styles.label}><Ionicons name="create" size={18} color="#333" /> 備註</Text>
+ <TextInput 
+ style={styles.noteInput} 
+value={note} 
+onChangeText={setNote} 
+multiline 
+ placeholder="請輸入備註，例如：領取容器規定..."
+  />
+ 
+ {/* 確認修改按鈕 (保持不變) */}
+ <TouchableOpacity 
+ style={styles.publishButton} 
+ onPress={handleUpdate}
+ disabled={isLoading} 
+>
+ <Text style={styles.publishButtonText}>
+{isLoading ? "修改中..." : "確認修改"}
+ </Text>
+</TouchableOpacity>
+ </View>
+ </ScrollView>
+ </KeyboardAvoidingView>
+);
 }
