@@ -872,29 +872,24 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, onTog
 
     const formatTimeTaipei = (isoString: string) => {
         if (!isoString) return '';
-        
+
         try {
-            const dateObject = new Date(isoString);
-            
-            const utcHours = dateObject.getUTCHours();
-            const utcMinutes = dateObject.getUTCMinutes();
-            
-            const timezoneOffset = 8; 
-            
-            const taipeiHours = (utcHours - timezoneOffset) % 24; 
-            
-            const formattedHours = String(taipeiHours).padStart(2, '0');
-            const formattedMinutes = String(utcMinutes).padStart(2, '0');
-            
-            return `${formattedHours}:${formattedMinutes}`;
-            
+            const date = new Date(isoString);
+
+            // 中原標準時間 (UTC) ➜ 台北時間 (UTC+8)
+            let hours = date.getUTCHours() + 16;
+            const minutes = date.getUTCMinutes();
+
+            if (hours >= 24) hours -= 24;
+
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
         } catch (e) {
-            console.error("手動時間格式化失敗:", e);
-            return isoString.substring(11, 16); 
+            console.error('時間轉換失敗:', e);
+            return isoString.substring(11, 16);
         }
     };
 
-    const formatTimeAgo = (isoString) => {
+    const formatTimeAgo = (isoString: string) => {
         if (!isoString) return '';
 
         const utcIsoString = isoString.endsWith('Z') ? isoString : isoString + 'Z';
