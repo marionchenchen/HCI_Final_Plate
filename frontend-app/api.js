@@ -1,6 +1,6 @@
 // api.js
 
-const BASE_URL = 'http://172.18.108.187:8000'; 
+const BASE_URL = 'http://172.18.108.42:8000'; 
 
 async function debugFetch(url, options = {}) {
     console.log("========== FETCH START ==========");
