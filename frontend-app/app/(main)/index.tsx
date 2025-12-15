@@ -8,10 +8,15 @@ export default function MainScreenSimulation() {
 
     const { loginAs } = useUser();
 
-    const demoUsers = [
-        { id: 1, name: 'Receiver 1' },
-        { id: 2, name: 'Receiver 2' },
-        { id: 3, name: 'Receiver 3' },
+    const BotUsers = [
+        { id: 1, name: 'Bot 1' },
+        { id: 2, name: 'Bot 2' },
+        { id: 3, name: 'Bot 3' },
+    ];
+
+    const Users = [
+        { id: 4, name: 'Provider' },
+        { id: 5, name: 'Receiver' },
         // ... 
     ];
 
@@ -28,14 +33,16 @@ export default function MainScreenSimulation() {
     return (
         <View style={styles.container}>
             <Text style={styles.title}>HCI Demo 入口網站</Text>
-            <TouchableOpacity
-                key={4}
-                style={styles.userButton}
-                onPress={() => _handleLogin(4)}
-            >
-                <Text style={styles.userText}>{`Provider`}</Text>
-            </TouchableOpacity>
-            {demoUsers.map((user) => (
+            {Users.map((user) => (
+                <TouchableOpacity
+                    key={user.id}
+                    style={styles.userButton}
+                    onPress={() => _handleLogin(user.id)}
+                >
+                    <Text style={styles.userText}>{user.name}</Text>
+                </TouchableOpacity>
+            ))}
+            {BotUsers.map((user) => (
                 <TouchableOpacity
                     key={user.id}
                     style={styles.userButton}
