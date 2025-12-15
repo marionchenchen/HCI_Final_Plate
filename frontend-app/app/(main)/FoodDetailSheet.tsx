@@ -1376,18 +1376,19 @@ const styles = StyleSheet.create({
         flexDirection: 'row', // 讓地址和驗證圖案並排
         alignItems: 'center',
         flex: 1, 
+        flexWrap: 'wrap',
     },
     verificationIconText: {
-        fontSize: 18, // 確保與地址文字大小相匹配
-        lineHeight: 22, // 確保垂直對齊
+        fontSize: 35, // 確保與地址文字大小相匹配
+        lineHeight: 40, // 確保垂直對齊
     },
     TitleText: {
         fontSize: 18, // 確保與地址文字大小相匹配
-        lineHeight: 22, // 確保垂直對齊
+        lineHeight: 40, // 確保垂直對齊
         textAlign: 'center',
         padding: 20,
         color: 'black',
-        fontStyle: 'italic',
+        //fontStyle: 'italic',
     },
     _editButton: {
         padding: 5,
@@ -1611,7 +1612,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     verificationIconText_: {
-        fontSize: 40,
+        fontSize: 39,
     },
     foodListText: {
         fontSize: 14,
