@@ -83,6 +83,7 @@ interface ReservationUserItem {
 // 內部品項的簡化結構
 interface GroupedReservedItem {
     reservation_id: number;
+    item_id: number;
     item_name: string;
     number_book: number;
 }
@@ -402,8 +403,7 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
     // 預約品項
     const reservationItems = currentUserReservationGroup?.reserved_items || [];
 
-    // 所有品項 & 可編輯品項(copy of 預約品項)
-    const allFoodItems = location.food_items || [];
+    // 可編輯品項(copy of 預約品項)
     const [editableReservationItems, setEditableReservationItems] = useState(reservationItems);
 
     // 時間&狀態
@@ -415,7 +415,9 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
 
     // 把原本的預約複製到可編輯的預約
     useEffect(() => {
-        setEditableReservationItems(reservationItems);
+        if (!isEditing) {
+            setEditableReservationItems(reservationItems);
+        }
     }, [reservationItems]);
 
     // 計算時間
@@ -472,48 +474,18 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
     
     // 儲存修改的預約數量
     const handleSave = async () => {
-        // 1. 準備 Payload
         const payload = {
-            items: reservationItems.map(item => ({
-                item_id: item.reservation_id, 
+            items: editableReservationItems.map(item => ({
+                item_id: item.item_id,
                 new_amount: Number(item.number_book),
             })),
         };
-
-        console.log('Sending payload:', JSON.stringify(payload, null, 2));
-
         try {
-            // 2. 呼叫 API 函式
-            const statusList = await modifyReservation(
-                location.food_id,
-                user_id,
-                payload
-            );
-
-            // 3. 檢查後端回傳的狀態
-            // 檢查是否有任一項目驗證失敗
-            const anyInvalid = statusList.some(s => !s.is_valid);
-
-            if (anyInvalid) {
-                // 後端驗證失敗 → 找出第一個錯誤
-                const firstError = statusList.find(s => !s.is_valid);
-                Alert.alert(
-                    "更新失敗",
-                    firstError?.error_type || "修改預約數量失敗，請檢查剩餘份數。"
-                );
-                
-                // 選擇性：如果失敗，您可以考慮重新從後端抓取最新的預約狀態 (如果您在父元件中有 refetch 邏輯)
-            
-            } else {
-                Alert.alert("成功", "已成功更改預約數量!");
-            }
-
-            setIsEditing(false); 
-            
+            await modifyReservation(location.food_id, user_id, payload);
+            console.log(`預約編輯成功`);
+            handleClose();
         } catch (error) {
-            // 捕獲網路錯誤或 API 拋出的錯誤
-            console.error(error);
-            Alert.alert('更新失敗', error.message || '連線錯誤，請稍後再試。');
+            console.error("編輯失敗:", error);
         }
     };
 
@@ -694,7 +666,7 @@ const ReservedFoodView = ({ location, user_id, reservations, handleClose }: Rese
                     
                     {/* 評論標籤區 */}
                     <View style={styles.commentEmojis}>
-                        {['🔥 Still hot', '😋 好吃', '🌿 Fresh', '💡 建議']
+                        {['🔥 還是熱的', '😋 好吃', '🌿 超出期待', '💡 cp值高']
                             .map(tag => (
                                 <TouchableOpacity
                                     key={tag}
@@ -790,6 +762,7 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, onTog
                     const reservedItems: GroupedReservedItem[] = userGroup.reservations.map((resItem) => {
                         return {
                             reservation_id: resItem.reservation_id,
+                            item_id: resItem.item_id,
                             item_name: resItem.item_name,
                             number_book: resItem.number_book,
                         };
@@ -820,9 +793,9 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, onTog
         fetchCurrentReservations(); 
 
         const pollingInterval = setInterval(() => {
-            console.log(`[Provider Sheet] 輪詢中，獲取 Food ID: ${location.food_id} 的最新預約`);
+            //console.log(`[Provider Sheet] 輪詢中，獲取 Food ID: ${location.food_id} 的最新預約`);
             fetchCurrentReservations(); 
-        }, 1000);
+        }, 2000);
 
         return () => {
             clearInterval(pollingInterval);
@@ -1024,7 +997,7 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, onTog
     );
 
     return (
-        <ScrollView>
+        <View>
         <View style={{ paddingBottom: 16 }}>
             {isMyFood ? (
                 // 渲染 Provider 介面
@@ -1049,7 +1022,7 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, onTog
                 </View>
             )}
         </View>
-        </ScrollView>
+        </View>
     );
 }
 

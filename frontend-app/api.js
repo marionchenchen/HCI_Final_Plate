@@ -1,6 +1,6 @@
 // api.js
 
-const BASE_URL = 'http://172.20.10.4:8000'; 
+const BASE_URL = 'http://172.18.108.42:8000'; 
 
 // 發布貼文
 export async function publishFoodPost(payload) {
@@ -201,8 +201,12 @@ export const createReservation = async (reservationData) => {
 export const modifyReservation = async (foodId, userId, payload) => {
     //console.log('API Payload:', JSON.stringify(payload, null, 2));
 
+    const url = `${BASE_URL}/reservations/food/${foodId}/user/${userId}/modify`;
+    console.log('Final API URL:', url); // ⭐️ 請將這個 Log 的結果貼給我 ⭐️
+    console.log(JSON.stringify(payload))
+
     try {
-        const response = await fetch(`${BASE_URL}/reservations/food/${foodId}/user/${userId}/modify`, {
+        const response = await fetch(url, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
