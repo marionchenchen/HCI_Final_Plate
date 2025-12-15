@@ -1379,14 +1379,14 @@ const styles = StyleSheet.create({
         flexWrap: 'wrap',
     },
     verificationIconText: {
-        fontSize: 35, // 確保與地址文字大小相匹配
-        lineHeight: 40, // 確保垂直對齊
+        fontSize: 40, // 確保與地址文字大小相匹配
+        lineHeight: 45, // 確保垂直對齊
     },
     TitleText: {
         fontSize: 18, // 確保與地址文字大小相匹配
-        lineHeight: 40, // 確保垂直對齊
+        lineHeight: 45, // 確保垂直對齊
         textAlign: 'center',
-        padding: 20,
+        padding: 0,
         color: 'black',
         //fontStyle: 'italic',
     },
