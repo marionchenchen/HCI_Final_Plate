@@ -17,6 +17,7 @@ export default function MainScreenSimulation() {
     const Users = [
         { id: 4, name: 'Provider' },
         { id: 5, name: 'Receiver' },
+        { id: 6, name: 'Receiver 2' },
         // ... 
     ];
 

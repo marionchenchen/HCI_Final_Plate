@@ -979,19 +979,40 @@ export default function FoodDetailSheet({ location, handleClose, myUserId, onTog
             return;
             }
 
-            try {
-            const location = await Location.getCurrentPositionAsync({
-                accuracy: Location.Accuracy.High,
-            });
+            if(myUserId == 1 || myUserId == 2 || myUserId == 3){
+                try {
+                    let locationArray = await fetchUsersLocations([myUserId]); 
+        
+                    if (locationArray && locationArray.length > 0) {
+                        
+                        const location = locationArray[0]; 
+                        const { gps_latitude, gps_longitude } = location;
+        
+                        if (gps_latitude && gps_longitude) {
+                            setUserLocation({ 
+                                latitude: gps_latitude, 
+                                longitude: gps_longitude 
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error("輪詢更新位置時發生錯誤:", e);
+                }
+            } else {
+                try {
+                const location = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.High,
+                });
 
-            setUserLocation({
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-            });
+                setUserLocation({
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                });
 
-            setLocationError(null);
-            } catch (e) {
-            setLocationError('無法取得 GPS 位置，請確認定位已開啟');
+                setLocationError(null);
+                } catch (e) {
+                setLocationError('無法取得 GPS 位置，請確認定位已開啟');
+                }
             }
         })();
     }, [isMyFood]);

@@ -1,6 +1,6 @@
 // api.js
 
-const BASE_URL = 'http://172.18.108.42:8000'; 
+const BASE_URL = 'http://172.18.17.231:8000'; 
 
 async function debugFetch(url, options = {}) {
     console.log("========== FETCH START ==========");
@@ -140,18 +140,24 @@ export const updatePost = async (foodId, postData) => {
 
 // 取得特定貼文的預約資訊
 export async function fetchReservationsByFood(foodId) {
-    const response = await fetch(`${BASE_URL}/reservations/food/${foodId}`);
-    if (!response.ok) {
-        throw new Error('Failed to fetch reservations');
+    try {
+        const response = await fetch(`${BASE_URL}/reservations/food/${foodId}`);
+        if (!response.ok) {
+            return [];
+        }
+        const data = await response.json();
+        return Array.isArray(data) ? data : [];
+    } catch (error) {
+        return [];
     }
-    return response.json();
 }
+
 
 // 取得特定使用者預約貼文的ID
 export async function fetchFoodIdByUser(userId) {
     const response = await fetch(`${BASE_URL}/reservations/user/${userId}`);
     if (!response.ok) {
-        throw new Error('Failed to fetch reservation');
+        //throw new Error('Failed to fetch reservation');
     }
     const reservation = await response.json();
     console.log("Reservation data from API:", reservation);
@@ -161,7 +167,7 @@ export async function fetchFoodIdByUser(userId) {
 export async function fetchReserveInfoByUser(userId) {
     const response = await fetch(`${BASE_URL}/reservations/user/${userId}`);
     if (!response.ok) {
-        throw new Error('Failed to fetch reservation');
+        //throw new Error('Failed to fetch reservation');
     }
 
     const data = await response.json();
@@ -182,7 +188,7 @@ export async function fetchReserveInfoByUser(userId) {
 export async function fetchReservationsByUserAndFood(userId, foodId) {
     const response = await fetch(`${BASE_URL}/reservations/user/${userId}`);
     if (!response.ok) {
-        throw new Error('Failed to fetch reservations by user');
+        //throw new Error('Failed to fetch reservations by user');
     }
 
     const data = await response.json();
@@ -325,7 +331,7 @@ export async function pickupFail(userId, foodId) {
             throw new Error(result.detail || `API error: ${response.status} ${response.statusText}`);
         }
 
-        console.log("Pickup Failed API success:", result);
+        //console.log("Pickup Failed API success:", result);
         return result;
 
     } catch (error) {

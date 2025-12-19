@@ -19,6 +19,7 @@ import FoodDetailSheet from './FoodDetailSheet';
 import { fetchPosts, fetchFoodIdByUser, fetchReservationsByUserAndFood } from "../../api";
 import { useUser } from "../../context/UserContext"
 import { usePostRefresh } from '../../context/PostRefreshContext';
+import { useFocusEffect } from '@react-navigation/native';
 
 const LocalFoodImage = require('../../assets/pizza.jpg'); 
 const LocalTreeImage = require('../../assets/tree.png'); 
@@ -176,10 +177,13 @@ export default function Home() {
                     image: apiPost.pictures && apiPost.pictures.length > 0 
                         ? { uri: `data:image/jpeg;base64,${apiPost.pictures[0].picture}` } 
                         : LocalFoodImage, 
+                    color: getPostColor(apiPost)
+                    
                 };
             });
             
             setPosts(transformedPosts);
+            // console.log(posts);
             
         } catch (err) {
             console.error("Failed to load posts:", err);
@@ -192,7 +196,7 @@ export default function Home() {
                 setIsLoading(false);
             }
         }
-    }, [setIsLoading, setError, setPosts, fetchPosts, LocalFoodImage]);
+    }, [setIsLoading, setError, setPosts, fetchPosts, LocalFoodImage, userFoodId]);
 
     // Provider端即時更新
     useEffect(() => {
@@ -204,6 +208,7 @@ export default function Home() {
     useEffect(() => {
         const pollingInterval = setInterval(() => {
             loadPosts(true); 
+            //loadUserFood();
         }, 5000);
 
         return () => {
@@ -211,9 +216,10 @@ export default function Home() {
             clearInterval(pollingInterval);
         };
 
-    }, [loadPosts]);
+    }, [loadPosts, userFoodId]);
 
-    // 獲取所有預約剩食(呼叫 API)
+
+    //獲取所有預約剩食(呼叫 API)
     useEffect(() => {
         if (!userId) return;
 
@@ -228,8 +234,31 @@ export default function Home() {
         };
 
         loadUserFood();
-    }, [userId]);
+    }, [loadPosts, userId]);
 
+    // const loadUserFood = useCallback(async () => {
+    //     if (!userId) {
+    //         // 這裡不需要 return，因為外面調用前可能就已經檢查了，
+    //         // 但為了函式的健壯性，可以保留這個檢查
+    //         return; 
+    //     }
+
+    //     try {
+    //         // ⭐️ 實際的 API 呼叫邏輯 ⭐️
+    //         const foodId = await fetchFoodIdByUser(userId);
+            
+    //         // 狀態更新
+    //         setUserFoodId(foodId); 
+            
+    //         console.log("User's reserved food_id:", foodId);
+    //     } catch (err) {
+    //         console.error("Failed to fetch user's reservation:", err);
+    //     }
+    // }, [
+    //     userId, 
+    //     fetchFoodIdByUser, // 如果這是一個外部傳入或在元件外部定義的函式
+    //     setUserFoodId       // 狀態設定器 (Setter) 必須放入依賴
+    // ]);
     // notification start
     useEffect(() => {
         if (!userRegion) return;
@@ -277,7 +306,7 @@ export default function Home() {
             } catch (e) {
                 console.error(e);
             }
-        }, 3000); // 每 3 秒
+        }, 1000); // 每 3 秒
 
 
 
